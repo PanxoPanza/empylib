@@ -35,7 +35,7 @@ def read_nkfile(lam, MaterialName):
     assert os.path.isfile(filename), 'File not found'
     
     data = np.genfromtxt(filename)
-    assert data.shape[1] < 3, 'wrong file format'
+    assert data.shape[1] <= 3, 'wrong file format'
     
     N = np.zeros((len(lam),2))
     for i in range(1,data.shape[1]):
@@ -47,7 +47,7 @@ def read_nkfile(lam, MaterialName):
 
     return N[:,0] + 1j*N[:,1] , data
 
-def sio2(lam, nkFileName = 'sio2_Kischkat') :
+def sio2(lam, nkFileName = 'sio2_Palik_Lemarchand2013') :
     '''
     Complex refractive index of SiO2
 
@@ -64,6 +64,42 @@ def sio2(lam, nkFileName = 'sio2_Kischkat') :
         Complex refractive index.
 
     '''
-    return read_nkfile(lam,nkFileName)
-    
+    return read_nkfile(lam,nkFileName)[0]
 
+def tio2(lam, nkFileName = 'tio2_Siefke2016') :
+    '''
+    Complex refractive index of tio2
+
+    Parameters
+    ----------
+    lam : 1D numpy array
+        Wavelengths to interpolate (um).
+    nkFileName : string, optional
+        Name of *.nk file for SiO2. The default is 'sio2_Kischkat'.
+
+    Returns
+    -------
+    1D numpy array
+        Complex refractive index.
+
+    '''
+    return read_nkfile(lam,nkFileName)[0]
+    
+def au(lam, nkFileName = 'au_Olmon2012_evap') :
+    '''
+    Complex refractive index of gold
+
+    Parameters
+    ----------
+    lam : 1D numpy array
+        Wavelengths to interpolate (um).
+    nkFileName : string, optional
+        Name of *.nk file for SiO2. The default is 'sio2_Kischkat'.
+
+    Returns
+    -------
+    1D numpy array
+        Complex refractive index.
+
+    '''
+    return read_nkfile(lam,nkFileName)[0]
