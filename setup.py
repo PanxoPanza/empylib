@@ -9,6 +9,6 @@ setup(
       url='',
       packages=find_packages(exclude=()),
       install_requires=[
-          'numpy'
+          'numpy', 'os'
           ]
       )
