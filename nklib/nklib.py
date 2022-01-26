@@ -9,7 +9,7 @@ Created on Sun Nov  7 17:25:53 2021
 import os
 import numpy as np 
 
-def read_nkfile(lam, MaterialName):
+def get_nkfile(lam, MaterialName):
     '''
     Reads an *.nk file and returns an interpolated
     1D numpy array with the complex refractive index
@@ -26,7 +26,10 @@ def read_nkfile(lam, MaterialName):
     -------
     1D numpy array
         Interpolated complex refractive index
+    3D numpy array (optional)
+        Original tabulated data from file
     '''
+    
     # retrieve local path
     dir_path = os.path.dirname(__file__) + '\\'
     filename = dir_path + MaterialName + '.nk'
@@ -36,8 +39,15 @@ def read_nkfile(lam, MaterialName):
     
     data = np.genfromtxt(filename)
     assert data.shape[1] <= 3, 'wrong file format'
+
+    # if lam is scalar length = 1, else get arrays length
+    if np.isscalar(lam):
+        len_lam = 1
+    else:
+        len_lam = len(lam)
     
-    N = np.zeros((len(lam),2))
+    # create complex refractive index using interpolation form nkfile
+    N = np.zeros((len_lam,2))
     for i in range(1,data.shape[1]):
         # interpolate the refractive index according to "lam"
         N[:,i-1] = np.interp(lam,data[:,0],data[:,i])
@@ -47,59 +57,17 @@ def read_nkfile(lam, MaterialName):
 
     return N[:,0] + 1j*N[:,1] , data
 
-def sio2(lam, nkFileName = 'sio2_Palik_Lemarchand2013') :
-    '''
-    Complex refractive index of SiO2
+'''
+    --------------------------------------------------------------------
+                            Target functions
+    --------------------------------------------------------------------
+'''
 
-    Parameters
-    ----------
-    lam : 1D numpy array
-        Wavelengths to interpolate (um).
-    nkFileName : string, optional
-        Name of *.nk file for SiO2. The default is 'sio2_Kischkat'.
+# refractive index of sio2
+sio2 = lambda lam, nkID = 'sio2_Palik_Lemarchand2013': get_nkfile(lam, nkID)[0]
 
-    Returns
-    -------
-    1D numpy array
-        Complex refractive index.
+# refractive index of tio2
+tio2 = lambda lam, nkID = 'tio2_Siefke2016': get_nkfile(lam, nkID)[0]
 
-    '''
-    return read_nkfile(lam,nkFileName)[0]
-
-def tio2(lam, nkFileName = 'tio2_Siefke2016') :
-    '''
-    Complex refractive index of tio2
-
-    Parameters
-    ----------
-    lam : 1D numpy array
-        Wavelengths to interpolate (um).
-    nkFileName : string, optional
-        Name of *.nk file for SiO2. The default is 'sio2_Kischkat'.
-
-    Returns
-    -------
-    1D numpy array
-        Complex refractive index.
-
-    '''
-    return read_nkfile(lam,nkFileName)[0]
-    
-def au(lam, nkFileName = 'au_Olmon2012_evap') :
-    '''
-    Complex refractive index of gold
-
-    Parameters
-    ----------
-    lam : 1D numpy array
-        Wavelengths to interpolate (um).
-    nkFileName : string, optional
-        Name of *.nk file for SiO2. The default is 'sio2_Kischkat'.
-
-    Returns
-    -------
-    1D numpy array
-        Complex refractive index.
-
-    '''
-    return read_nkfile(lam,nkFileName)[0]
+# refractive index of gold
+au = lambda lam, nkID = 'au_Olmon2012_evap': get_nkfile(lam, nkID)[0]
