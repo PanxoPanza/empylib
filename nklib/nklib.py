@@ -64,10 +64,10 @@ def get_nkfile(lam, MaterialName):
 '''
 
 # refractive index of sio2
-sio2 = lambda lam, nkID = 'sio2_Palik_Lemarchand2013': get_nkfile(lam, nkID)[0]
+sio2 = lambda lam: get_nkfile(lam, nkID = 'sio2_Palik_Lemarchand2013')[0]
 
 # refractive index of tio2
-tio2 = lambda lam, nkID = 'tio2_Siefke2016': get_nkfile(lam, nkID)[0]
+tio2 = lambda lam: get_nkfile(lam, nkID = 'tio2_Siefke2016')[0]
 
 # refractive index of gold
-au = lambda lam, nkID = 'au_Olmon2012_evap': get_nkfile(lam, nkID)[0]
+au = lambda lam: get_nkfile(lam, nkID = 'au_Olmon2012_evap')[0]
