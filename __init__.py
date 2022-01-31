@@ -1,6 +1,7 @@
 
 from . import nklib
 from . import ref_spectra
+from . import miescattering
 
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
