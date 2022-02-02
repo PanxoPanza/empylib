@@ -37,8 +37,10 @@ def get_nkfile(lam, MaterialName):
 
     if platform.system() == "Linux":    # linux
         dir_separator= '/'
+
     elif platform.system() == 'Darwin': # OS X
         dir_separator='/'
+
     elif platform.system() == "win32":  # Windows...
         dir_separator='\\'
 
