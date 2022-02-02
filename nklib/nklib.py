@@ -31,8 +31,25 @@ def get_nkfile(lam, MaterialName):
     '''
     
     # retrieve local path
-    dir_path = os.path.dirname(__file__) + '\\'
-    filename = dir_path + MaterialName + '.nk'
+
+    import platform
+    print(platform.system())
+
+    if platform.system() == "Linux":
+        # linux
+        dir_path = os.path.dirname(__file__) + '/'
+        filename = dir_path + MaterialName + '.nk'
+    elif platform.system() == 'Darwin':
+        # OS X
+        dir_path = os.path.dirname(__file__) + '/'
+        filename = dir_path + MaterialName + '.nk'
+    elif platform.system() == "win32":
+        # Windows...
+        dir_path = os.path.dirname(__file__) + '\\'
+        filename = dir_path + MaterialName + '.nk'
+
+
+    print(filename)
    
     # check if file exist
     assert os.path.isfile(filename), 'File not found'
