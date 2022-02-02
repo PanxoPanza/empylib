@@ -13,7 +13,7 @@ def get_nkfile(lam, MaterialName):
     '''
     Reads an *.nk file and returns an interpolated
     1D numpy array with the complex refractive index
-    of the material
+    of the material Hola chuquitin
     
     Parameters
     ----------
