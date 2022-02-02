@@ -33,7 +33,6 @@ def get_nkfile(lam, MaterialName):
     # retrieve local path
 
     import platform
-    print(platform.system())
 
     dir_separator = '\\' # default value
     if platform.system() == "Linux":    # linux
@@ -47,7 +46,6 @@ def get_nkfile(lam, MaterialName):
 
     dir_path = os.path.dirname(__file__) + dir_separator
     filename = dir_path + MaterialName + '.nk'
-    print(filename)
    
     # check if file exist
     assert os.path.isfile(filename), 'File not found'
