@@ -2,12 +2,15 @@ from setuptools import find_packages, setup
 
 setup(
       name='empylib',
-      version='0.1.0',
+      version='0.0.1',
       description='Standard python library for computational electromagnetics',
+      long_description=open('README.md').read() + '\n\n' + open(CHANGELOG.txt).read(),
       author='Francisco V. Ramirez-Cuevas',
       author_author_email='francisco.ramirez.c@uai.cl',
       url='https://github.com/PanxoPanza/empylib.git',
       packages=find_packages(),
+      licence='MIT',
+      keywords='electromagnetics',
       #install_requires=[
       #    'numpy', 'os', 'scipy'
       #    ],
