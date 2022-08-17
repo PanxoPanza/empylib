@@ -83,4 +83,7 @@ sio2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 tio2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2016')[0]
 
 # refractive index of gold
-au = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
+gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
+
+# refractive index of silicon
+si = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
