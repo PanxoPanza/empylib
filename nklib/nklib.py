@@ -7,6 +7,7 @@ Created on Sun Nov  7 17:25:53 2021
 @author: PanxoPanza
 """
 import os
+import platform
 import numpy as np 
 
 def get_nkfile(lam, MaterialName):
@@ -31,9 +32,6 @@ def get_nkfile(lam, MaterialName):
     '''
     
     # retrieve local path
-
-    import platform
-
     dir_separator = '\\' # default value
     if platform.system() == "Linux":    # linux
         dir_separator= '/'

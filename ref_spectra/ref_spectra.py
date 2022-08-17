@@ -11,6 +11,7 @@ Created on Fri Jan 21 16:05:48 2022
 """
 
 import os
+import platform
 import numpy as np 
 import empylib as em
 
@@ -33,10 +34,20 @@ def read_spectrafile(lam, MaterialName):
         1.Interpolated complex refractive index
         2.Tabulated data used for interpolation (optional)
     '''
-    
-    dir_path = os.path.dirname(__file__) + '\\'
+    # retrieve local path
+    dir_separator = '\\' # default value
+    if platform.system() == "Linux":    # linux
+        dir_separator= '/'
+
+    elif platform.system() == 'Darwin': # OS X
+        dir_separator='/'
+
+    elif platform.system() == "Windows":  # Windows...
+        dir_separator='\\'
+
+    dir_path = os.path.dirname(__file__) + dir_separator
     filename = dir_path + MaterialName
-   
+    
     # check if file exist
     assert os.path.isfile(filename), 'File not found'
     
