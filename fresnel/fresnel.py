@@ -72,7 +72,13 @@ def interface(theta,n1,n2):
         
     R_s = abs(R_s)
     T_s = abs(T_s)
-
+    
+    # if theta is not an array reshape array to a column vector
+    if not type(theta) == np.ndarray :
+        return R_p.T, T_p.T, r_p.T, t_p.T, \
+               R_s.T, T_s.T, r_s.T, t_s.T
+        
+        
     return R_p, T_p, r_p, t_p, \
            R_s, T_s, r_s, t_s
 
@@ -172,6 +178,9 @@ def multilayer(lam,tt,N,d, pol):
     elif 'p' in pol:
             R = abs(r)**2
             T = real(conj(Nend)*cosTn)/real(conj(N0)*cosT0)*abs(t)**2
-
+    
+    # if theta is not an array reshape array to a column vector
+    if not type(tt) == np.ndarray :
+        return R.T, T.T, r.T, t.T
+        
     return R, T, r, t
-
