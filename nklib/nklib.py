@@ -70,6 +70,72 @@ def get_nkfile(lam, MaterialName):
 
 '''
     --------------------------------------------------------------------
+                    dielectric constant models
+    --------------------------------------------------------------------
+'''
+def lorentz(epsinf,wp,wn,gamma,lam):
+    '''
+    Refractive index from Lorentz model
+
+    Parameters
+    ----------
+    epsinf : float
+        dielectric constant at infinity.
+    wp : float
+        Plasma frequency, in eV (wp^2 = Nq^2/eps0 m).
+    wn : float
+        Natural frequency in eV
+    gamma : float
+        Decay rate in eV
+    lam : linear np.array
+        wavelength spectrum in um
+
+    Returns
+    -------
+    complex refractive index
+
+    '''
+    # define constants
+    eV = 1.602176634E-19          # eV to J (conversion)
+    hbar = 1.0545718E-34          # J*s (plank's constan)
+    
+    
+    w = 2*np.pi*3E14/lam*hbar/eV  # conver from um to eV 
+    
+    return np.sqrt(epsinf + wp**2/(wn**2 - w**2 - 1j*gamma*w))
+
+
+def drude(epsinf,wp,gamma,lam):
+    '''
+    Refractive index from Drude model
+
+    Parameters
+    ----------
+    epsinf : float
+        dielectric constant at infinity.
+    wp : float
+        Plasma frequency, in eV (wp^2 = Nq^2/eps0 m).
+    gamma : float
+        Decay rate in eV
+    lam : linear np.array
+        wavelength spectrum in um
+
+    Returns
+    -------
+    complex refractive index
+
+    '''
+    # define constants
+    eV = 1.602176634E-19          # eV to J (conversion)
+    hbar = 1.0545718E-34          # J*s (plank's constan)
+    
+    
+    w = 2*np.pi*3E14/lam*hbar/eV  # conver from um to eV 
+    
+    return np.sqrt(epsinf - wp**2/(w**2 + 1j*gamma*w))
+
+'''
+    --------------------------------------------------------------------
                             Target functions
     --------------------------------------------------------------------
 '''
@@ -85,3 +151,6 @@ gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
 
 # refractive index of silicon
 si = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
+
+# refractive index of water
+h2o = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
