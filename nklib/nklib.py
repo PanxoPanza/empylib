@@ -144,13 +144,22 @@ def drude(epsinf,wp,gamma,lam):
 sio2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 
 # refractive index of tio2
-tio2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2016')[0]
+tio2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
 
-# refractive index of gold
+# refractive index of Gold
 gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
 
+# refractive index of Copper
+cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015')[0]
+
+# refractive index of Aluminium
+al   = lambda lam: get_nkfile(lam, 'al_Rakic1995')[0]
+
+# refractive index of Silver
+ag = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017')[0]
+
 # refractive index of silicon
-si = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
+si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
 
 # refractive index of water
-h2o = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
+h2o  = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
