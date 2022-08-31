@@ -9,6 +9,7 @@ Created on Sun Nov  7 17:25:53 2021
 import os
 import platform
 import numpy as np 
+from scipy.interpolate import CubicSpline
 
 def get_nkfile(lam, MaterialName):
     '''
@@ -51,22 +52,11 @@ def get_nkfile(lam, MaterialName):
     data = np.genfromtxt(filename)
     assert data.shape[1] <= 3, 'wrong file format'
 
-    # if lam is scalar length = 1, else get arrays length
-    if np.isscalar(lam):
-        len_lam = 1
-    else:
-        len_lam = len(lam)
-    
     # create complex refractive index using interpolation form nkfile
-    N = np.zeros((len_lam,2))
-    for i in range(1,data.shape[1]):
-        # interpolate the refractive index according to "lam"
-        N[:,i-1] = np.interp(lam,data[:,0],data[:,i])
-        
-        # for extrapolated values make out = 0
-        N[:,i-1] = N[:,i-1]*(lam<=np.max(data[:,0]))*(lam>=np.min(data[:,0])) 
+    n = CubicSpline(data[:,0],data[:,1])
+    k = CubicSpline(data[:,0],data[:,2])
 
-    return N[:,0] + 1j*N[:,1] , data
+    return n(lam) + 1j*k(lam) , data
 
 '''
     --------------------------------------------------------------------
