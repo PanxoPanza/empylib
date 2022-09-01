@@ -148,7 +148,7 @@ def get_coated_coefficients(m,x, nmax):
     mi1x = mi1[1:]*x        # Ni+1*k*ri
     
     # Computation of Dn(z), Gn(z) and Rn(z)
-    nmx = np.round(max(nmax, max(abs(m*x))) + 16)
+    nmx = int(np.round(max(nmax, max(abs(m*x))) + 16))
     
     # Get Dn(mi*x), Gn(mi*x), Rn(mi*x) 
     Dn, Gn, Rn = log_RicattiBessel(mix,nmax,nmx)
