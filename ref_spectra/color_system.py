@@ -26,21 +26,22 @@ class ColorSystem:
     TODO: Implement gamma correction
 
     """
-
-    # The CIE color matching function for 380 - 780 nm in 5 nm intervals
+    # Configure directory path
     dir_separator = '\\' # default value
-    if platform.system() == "Linux":    # linux
+    if platform.system() == "Linux":        # linux
         dir_separator= '/'
 
-    elif platform.system() == 'Darwin': # OS X
+    elif platform.system() == 'Darwin':     # OS X
         dir_separator='/'
 
-    elif platform.system() == "Windows":  # Windows...
+    elif platform.system() == "Windows":    # Windows...
         dir_separator='\\'
 
+    # The CIE color matching function for 380 - 780 nm in 5 nm intervals
     file_name = 'cie-cmf.txt'
     dir_path = os.path.dirname(__file__) + dir_separator
-    cmf = np.loadtxt(dir_path+file_name, usecols=(1,2,3))
+    lam_cmf = np.loadtxt(dir_path+file_name, usecols=(0)) # wavelength spectrum
+    cmf = np.loadtxt(dir_path+file_name, usecols=(1,2,3)) # x, y, z  CIE colour matching functions
 
     def __init__(self, red, green, blue, white):
         """Initialise the colorSystem object.
@@ -54,11 +55,14 @@ class ColorSystem:
         # Chromaticities
         self.red, self.green, self.blue = red, green, blue
         self.white = white
+        
         # The chromaticity matrix (rgb -> xyz) and its inverse
         self.M = np.vstack((self.red, self.green, self.blue)).T 
         self.MI = np.linalg.inv(self.M)
+        
         # White scaling array
         self.wscale = self.MI.dot(self.white)
+        
         # xyz -> rgb transformation matrix
         self.T = self.MI / self.wscale[:, np.newaxis]
 
@@ -93,24 +97,29 @@ class ColorSystem:
         hex_rgb = (255 * rgb).astype(int)
         return '#{:02x}{:02x}{:02x}'.format(*hex_rgb)
 
-    def spec_to_xyz(self, spec):
+    def spec_to_xyz(self, lam, spec):
         """Convert a spectrum to an xyz point.
 
         The spectrum must be on the same grid of points as the color-matching
         function, self.cmf: 380-780 nm in 5 nm steps.
 
         """
-
-        XYZ = np.sum(spec[:, np.newaxis] * self.cmf, axis=0)
+        cmf_local = np.zeros((len(lam),3))
+        cmf_local[:,0] = np.interp(lam,self.lam_cmf,self.cmf[:,0])
+        cmf_local[:,1] = np.interp(lam,self.lam_cmf,self.cmf[:,1])
+        cmf_local[:,2] = np.interp(lam,self.lam_cmf,self.cmf[:,2])
+        
+        #XYZ = np.sum(spec[:, np.newaxis] * self.cmf, axis=0)
+        XYZ = np.trapz(spec[:, np.newaxis] *cmf_local, x=lam, axis=0)
         den = np.sum(XYZ)
         if den == 0.:
             return XYZ
         return XYZ / den
 
-    def spec_to_rgb(self, spec, out_fmt=None):
+    def spec_to_rgb(self, lam, spec, out_fmt=None):
         """Convert a spectrum to an rgb value."""
 
-        xyz = self.spec_to_xyz(spec)
+        xyz = self.spec_to_xyz(lam, spec)
         return self.xyz_to_rgb(xyz, out_fmt)
 
 illuminant_D65 = xyz_from_xy(0.3127, 0.3291)

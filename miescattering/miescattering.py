@@ -283,24 +283,27 @@ def cross_section_at_lam(m,x,nmax = -1):
 def scatter_efficiency(lam,Nh,Np,D):
     
     '''
-    Compute mie scattering parameters for multi-shell spherical objects
+    Compute mie scattering parameters for multi-shell spherical object
 
     Parameters
     ----------
-    lam : 1D numpy array
-        wavelengtgh (um)
-    Nh : 1D numpy array
+    lam : ndarray
+        wavelengtgh (microns)
+    Nh : ndarray
         Complex refractive index of host
-    Np : 2D numpy array (D x lam)
-        Complex refractive index of sphere
-    D : 1D array
-        Diameter of sphere shells
+    Np : tupple
+        Complex refractive index of each shell layer
+    D : tupple
+        Outter diameter of each shell's layer (microns)
 
     Returns
     -------
-    Qext : Extinction efficiency
-    Qsca : Scattering efficiency
-    gcos : Asymmetry parameter
+    Qext : ndarray
+        Extinction efficiency
+    Qsca : ndarray
+        Scattering efficiency 
+    gcos : ndarray
+        Asymmetry parameter
     '''
     if np.isscalar(lam):    lam = np.array([lam])
     if np.isscalar(D):      D = np.array([D])
@@ -316,13 +319,66 @@ def scatter_efficiency(lam,Nh,Np,D):
     x = np.tensordot(kh,R,axes=0)   # size parameter
 
     m = m.transpose()
-    Qext = np.zeros(len(lam))
-    Qsca = np.zeros(len(lam))
-    Asym = np.zeros(len(lam))
+    qext = np.zeros(len(lam))
+    qsca = np.zeros(len(lam))
+    gcos = np.zeros(len(lam))
     
     for iw in range(len(lam)) :
-        Qext[iw], Qsca[iw], Asym[iw] = \
+        qext[iw], qsca[iw], gcos[iw] = \
             cross_section_at_lam(m[iw,:],x[iw,:])[:3]
         
-    return Qext, Qsca, Asym
+    return qext, qsca, gcos
     
+def scatter_coeffients(lam,Nh,Np,D):
+    
+    '''
+    Compute mie scattering coefficients an and bn for multi-shell spherical 
+    object
+
+    Parameters
+    ----------
+    lam : ndarray or float
+        wavelengtgh (microns)
+        
+    Nh : ndarray or float
+        Complex refractive index of host. If ndarray, the size must be equal to
+        len(lam)
+        
+    Np : ndarray
+        Complex refractive index of each shell layer. The number of elements
+        must be equal to len(D). Each element should be, either, a float or a 
+        ndarray of size (n,), where n = len(lam)
+        
+    D : ndarray
+        Outter diameter of each shell's layer (microns)
+
+    Returns
+    -------
+    an : ndarray
+        Scatttering coefficient M function
+    bn : ndarray
+        Scattering coefficient N function
+    '''
+    
+    # need to evalute if converting this to tuple
+    if np.isscalar(lam):    lam = np.array([lam])
+    if np.isscalar(D):      D = np.array([D])
+    if np.isscalar(Np):     Np = np.array([Np])
+    if Np.ndim == 1:        Np = Np.reshape(-1,len(Np))
+    
+    assert len(lam) == Np.shape[1]
+    assert len(D)   == Np.shape[0]
+    
+    m = Np/Nh                       # sphere layers
+    R = D/2                         # particle's inner radius
+    kh = 2*pi*Nh/lam                # wavector in the host
+    x = np.tensordot(kh,R,axes=0)   # size parameter
+
+    m = m.transpose()
+    an = np.zeros(len(lam))
+    bn = np.zeros(len(lam))
+    
+    for iw in range(len(lam)) :
+        an[iw], bn[iw] = cross_section_at_lam(m[iw,:],x[iw,:])[-2,-1]
+        
+    return an, bn

@@ -1,7 +1,9 @@
-
+import os
 from . import nklib
 from . import ref_spectra
 from . import miescattering
+from . import waveoptics
+from . import rad_transfer
 
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)

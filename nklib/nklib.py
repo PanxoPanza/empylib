@@ -10,6 +10,7 @@ import os
 import platform
 import numpy as np 
 from scipy.interpolate import CubicSpline
+from warnings import warn
 
 def get_nkfile(lam, MaterialName):
     '''
@@ -19,16 +20,16 @@ def get_nkfile(lam, MaterialName):
     
     Parameters
     ----------
-    lam : 1D numpy array
+    lam : ndarray
         Wavelengths to interpolate (um).
     MaterialName : string
         Name of *.nk file
 
     Returns
     -------
-    1D numpy array
+    N : ndarray
         Interpolated complex refractive index
-    3D numpy array (optional)
+    data: ndarray
         Original tabulated data from file
     '''
     
@@ -53,10 +54,21 @@ def get_nkfile(lam, MaterialName):
     assert data.shape[1] <= 3, 'wrong file format'
 
     # create complex refractive index using interpolation form nkfile
-    n = CubicSpline(data[:,0],data[:,1])
-    k = CubicSpline(data[:,0],data[:,2])
-
-    return n(lam) + 1j*k(lam) , data
+    n = CubicSpline(data[:,0],data[:,1],extrapolate=False)
+    k = CubicSpline(data[:,0],data[:,2],extrapolate=False)
+    
+    N = n(lam) + 1j*k(lam)
+    
+    # Add a flat nk for extrapolated values (warn user)
+    if lam[ 0] < data[ 0,0] :
+        warn('Extrapolating from %.3f to %.3f' % (lam[0], data[0,0]))
+        N[lam <= data[ 0,0]] = data[ 0,1] + 1j*data[ 0,2]
+        
+    if lam[-1] > data[-1,0] :
+        warn('Extrapolating from %.3f to %.3f' % (data[-1,0], lam[-1]))
+        N[lam >= data[-1,0]] = data[-1,1] + 1j*data[-1,2]
+    
+    return N, data
 
 '''
     --------------------------------------------------------------------
@@ -130,26 +142,26 @@ def drude(epsinf,wp,gamma,lam):
     --------------------------------------------------------------------
 '''
 
-# refractive index of sio2
-sio2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
+# refractive index of SiO2
+SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 
-# refractive index of tio2
-tio2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
+# refractive index of TiO2
+TiO2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
 
 # refractive index of Gold
 gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
 
 # refractive index of Copper
-cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015')[0]
+Cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015')[0]
 
 # refractive index of Aluminium
-al   = lambda lam: get_nkfile(lam, 'al_Rakic1995')[0]
+Al   = lambda lam: get_nkfile(lam, 'al_Rakic1995')[0]
 
 # refractive index of Silver
-ag = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017')[0]
+silver = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017')[0]
 
-# refractive index of silicon
-si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
+# refractive index of Silicon
+Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
 
 # refractive index of water
-h2o  = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
+H2O  = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
