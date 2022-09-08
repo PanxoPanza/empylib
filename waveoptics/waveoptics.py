@@ -113,7 +113,7 @@ def multilayer(lam,tt,N,d=(), pol='TM'):
         Wavelength range in microns.
         
     tt : ndarray or float
-        Angle of incidence in deg. 
+        Angle of incidence in radians. 
         
     N : tuple
         Refractive index of each layers, including the medium above and below 
@@ -150,7 +150,6 @@ def multilayer(lam,tt,N,d=(), pol='TM'):
     
     # optical constant
     Z0 = 376.730
-    tt = np.radians(tt) # transform angle from deg --> rad
 
     kk = 2*pi/lam
     # prepare variables (consider array of angles and frequencies)
@@ -227,7 +226,7 @@ def multilayer(lam,tt,N,d=(), pol='TM'):
         
     return R, T, r, t
 
-def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
+def incoh_multilayer(lam,theta,Nlayer,d=(),pol='TM', coh_length=0):
     '''
     Transfer matrix method (TMM) for coherent, and incoherent multilayer 
     structures. (Only tested at normal incidence)
@@ -240,9 +239,9 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
         wavelength range (microns)
         
     theta : float
-        angle of incidence (deg).
+        angle of incidence (radian).
         
-    N : tuple
+    Nlayer : tuple
         Refractive index of each layers, including the medium above and below 
         the film (i.e., minimum 2 arguments). The number of elements must be 
         equal to len(d) + 2. Each element should be, either, a float or a 
@@ -270,20 +269,19 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     '''
     
     # configure input data and assert size compatibility
-    lam, d = assert_multilayer_input(lam,d,N)
+    lam, d = assert_multilayer_input(lam,d,Nlayer)
     
-    theta = np.radians(theta)
     Lc = coh_length
-    
-    
-    # th_list is a list with, for each layer, the angle that the light travels
-    # through the layer. Computed with Snell's law. Note that the "angles" may be
-    # complex! source: https://github.com/sbyrnes321/tmm
-    th_list = list_snell(N, theta)
 
     # check layers with thickenss larger than Lc
     is_incoherent = d > Lc*cos(theta)/2;
-
+    
+    # convert all refractive index to arrays of size len(lam)
+    # store result into a list
+    N = []
+    for Ni in Nlayer:
+        if np.isscalar(Ni): Ni = np.ones(len(lam))*Ni
+        N.append(Ni)
     Nmid = [N[0]];
     dmid = [];
 
@@ -293,38 +291,23 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     TintP22 = 1
     
     nLayers = len(d)
-    th_0 = th_list[0]
+    th_0 = theta*np.ones(len(lam))
     for m in range(nLayers):
     
         # Compute transfer matrix for incoherent layers
         #----------------------------------------------------------------------
         if is_incoherent[m] :
             Nmid.append(N[m+1])
-            Nfw = Nmid.copy()
-            dfw = dmid.copy()
-            Nbw = Nmid.copy()
-            dbw = dmid.copy()
             
-            Nbw.reverse()
-            dbw.reverse()
-            
-            # adjust angle of incidence to the incoherent layer
-            th_0 = np.degrees(th_0) # convert to degrees
-            th_mp = np.degrees(th_list[m+1]) # convert to degrees
-            r0m,t0m = multilayer(lam, th_0,Nfw, dfw,pol)[-2:]
-            rm0,tm0 = multilayer(lam,th_mp,Nbw, dbw,pol)[-2:]
-        
-            T11_coh = 1/abs(t0m)**2;         
-            T12_coh = - abs(rm0)**2/abs(t0m)**2;
-            T21_coh = + abs(r0m)**2/abs(t0m)**2; 
-            T22_coh = (abs(t0m*tm0)**2 - abs(r0m*rm0)**2)/abs(t0m)**2;
+            T11_coh, T12_coh, T21_coh, T22_coh, th_end = \
+                TMMcoh(lam, th_0, Nmid, dmid, pol)
             
             Tint_11 = TintP11*T11_coh + TintP12*T21_coh
             Tint_12 = TintP11*T12_coh + TintP12*T22_coh
             Tint_21 = TintP21*T11_coh + TintP22*T21_coh
             Tint_22 = TintP21*T12_coh + TintP22*T22_coh
             
-            kzd = 2*pi/lam*N[m+1]*cos(th_list[m+1])*d[m]
+            kzd = 2*pi/lam*N[m+1]*cos(th_end)*d[m]
             exp_2kd = exp(-2*kzd.imag)
             
             # restrict small values to avoid overflow
@@ -340,7 +323,7 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
             TintP21 = Tint_21*P11 + Tint_22*P21
             TintP22 = Tint_21*P12 + Tint_22*P22
         
-            th_0 = th_list[m+1]   # update angle of incidence
+            th_0 = th_end   # update angle of incidence
             Nmid = [N[m+1]];
             dmid = [];
         else :
@@ -349,21 +332,9 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
 
     
     Nmid.append(N[-1])
-    Nfw = Nmid.copy()
-    dfw = dmid.copy()
-    Nbw = Nmid.copy()
-    dbw = dmid.copy()
-            
-    Nbw.reverse()
-    dbw.reverse()
     
-    rmN,tmN = multilayer(lam,th_0,Nfw, dfw,pol)[-2:]
-    rNm,tNm = multilayer(lam,th_0,Nbw, dbw,pol)[-2:]
-    
-    T11_coh = 1/abs(tmN)**2;
-    T12_coh = - abs(rNm)**2/abs(tmN)**2
-    T21_coh = + abs(rmN)**2/abs(tmN)**2
-    T22_coh = (abs(tmN*tNm)**2 - abs(rmN*rNm)**2)/abs(tmN)**2
+    T11_coh, T12_coh, T21_coh, T22_coh, th_end = \
+        TMMcoh(lam, th_0, Nmid, dmid, pol)
 
     Tint_11 = TintP11*T11_coh + TintP12*T21_coh
     Tint_12 = TintP11*T12_coh + TintP12*T22_coh
@@ -376,12 +347,12 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     # get reflectivity and transmissivity
     if pol=='TE' :
         R = R
-        T = real(     N[-1] *cos(th_list[-1]))/  \
-            real(     N[ 0] *cos(th_list[ 0]))*T
+        T = real(     N[-1] *cos(th_end))/  \
+            real(     N[ 0] *cos(theta))*T
     elif pol=='TM' :
         R = R
-        T = real(conj(N[-1])*cos(th_list[-1]))/  \
-            real(conj(N[ 0])*cos(th_list[ 0]))*T
+        T = real(conj(N[-1])*cos(th_end))/  \
+            real(conj(N[ 0])*cos(theta))*T
 
     
     return R, T
@@ -424,6 +395,39 @@ def assert_multilayer_input(lam,d,N):
                 'each refractive must be either a float or an ndarray of size len(lam)'
     
     return lam, d
+
+def TMMcoh(lam, th_0, Nmid, dmid, pol):
+    # store layer thickness
+    dfw = dmid.copy()
+    dbw = dmid.copy()
+    dbw.reverse()
+    
+    # adjust angle of incidence to the incoherent layer
+    # and iterate over each wavelength
+    th_end = np.zeros(len(lam),dtype=complex)
+    r0m = np.zeros(len(lam),dtype=complex)
+    t0m = np.zeros(len(lam),dtype=complex)
+    rm0 = np.zeros(len(lam),dtype=complex)
+    tm0 = np.zeros(len(lam),dtype=complex)
+    
+    for i in range(len(lam)):
+        th_end[i] = snell(Nmid[0][i], Nmid[-1][i], th_0[i])
+        
+        Nfw = []
+        Nbw = []
+        for j in range(len(Nmid)):
+            Nfw.append(Nmid[     j][i])
+            Nbw.append(Nmid[-(j+1)][i])
+        
+        r0m[i],t0m[i] = multilayer(lam[i], th_0[i],Nfw, dfw,pol)[-2:]
+        rm0[i],tm0[i] = multilayer(lam[i], th_end[i],Nbw, dbw,pol)[-2:]
+
+    T11_coh = 1/abs(t0m)**2;         
+    T12_coh = - abs(rm0)**2/abs(t0m)**2;
+    T21_coh = + abs(r0m)**2/abs(t0m)**2; 
+    T22_coh = (abs(t0m*tm0)**2 - abs(r0m*rm0)**2)/abs(t0m)**2;
+    return T11_coh, T12_coh, T21_coh, T22_coh, th_end
+
 
 #------------------------------------------------------------------
 # These are extra functions from TMM python code by Steve Byrnes
@@ -492,6 +496,8 @@ def list_snell(n_list, th_0):
     """
     # Important that the arcsin here is numpy.lib.scimath.arcsin, not
     # numpy.arcsin! (They give different results e.g. for arcsin(2).)
+    print('n_list[0]', n_list[0])
+    print('n_list',n_list)
     angles = arcsin(n_list[0]*np.sin(th_0) / n_list)
     # The first and last entry need to be the forward angle (the intermediate
     # layers don't matter, see https://arxiv.org/abs/1603.02720 Section 5)
