@@ -32,6 +32,8 @@ def get_nkfile(lam, MaterialName):
     data: ndarray
         Original tabulated data from file
     '''
+    # convert lambda to list
+    if np.isscalar(lam): lam = np.array([lam,])    
     
     # retrieve local path
     dir_separator = '\\' # default value
