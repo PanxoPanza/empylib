@@ -280,7 +280,6 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     # through the layer. Computed with Snell's law. Note that the "angles" may be
     # complex! source: https://github.com/sbyrnes321/tmm
     th_list = list_snell(N, theta)
-    print('th_list',th_list)
 
     # check layers with thickenss larger than Lc
     is_incoherent = d > Lc*cos(theta)/2;
