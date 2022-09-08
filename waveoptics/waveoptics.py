@@ -8,6 +8,10 @@ Created on Sun Nov  7 17:25:53 2021
 """
 import numpy as np
 from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+from numpy.lib.scimath import arcsin
+
+import sys
+EPSILON = sys.float_info.epsilon # typical floating-point calculation error
 
 def interface(theta,N1,N2, pol='TM'):
     '''
@@ -225,8 +229,8 @@ def multilayer(lam,tt,N,d=(), pol='TM'):
 
 def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     '''
-    Transfer matrix method (TMM) for coherent, partially coherent, and
-    incoherent multilayer structures.
+    Transfer matrix method (TMM) for coherent, and incoherent multilayer 
+    structures. (Only tested at normal incidence)
     
     Source: Katsidis, C. C. & Siapkas, D. I. Appl. Opt. 41, 3978 (2002).
 
@@ -270,6 +274,13 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     
     theta = np.radians(theta)
     Lc = coh_length
+    
+    
+    # th_list is a list with, for each layer, the angle that the light travels
+    # through the layer. Computed with Snell's law. Note that the "angles" may be
+    # complex! source: https://github.com/sbyrnes321/tmm
+    th_list = list_snell(N, theta)
+    print('th_list',th_list)
 
     # check layers with thickenss larger than Lc
     is_incoherent = d > Lc*cos(theta)/2;
@@ -283,6 +294,7 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     TintP22 = 1
     
     nLayers = len(d)
+    th_0 = th_list[0]
     for m in range(nLayers):
     
         # Compute transfer matrix for incoherent layers
@@ -297,8 +309,11 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
             Nbw.reverse()
             dbw.reverse()
             
-            r0m,t0m = multilayer(lam,theta,Nfw, dfw,pol)[-2:]
-            rm0,tm0 = multilayer(lam,theta,Nbw, dbw,pol)[-2:]
+            # adjust angle of incidence to the incoherent layer
+            th_0 = np.degrees(th_0) # convert to degrees
+            th_mp = np.degrees(th_list[m+1]) # convert to degrees
+            r0m,t0m = multilayer(lam, th_0,Nfw, dfw,pol)[-2:]
+            rm0,tm0 = multilayer(lam,th_mp,Nbw, dbw,pol)[-2:]
         
             T11_coh = 1/abs(t0m)**2;         
             T12_coh = - abs(rm0)**2/abs(t0m)**2;
@@ -309,8 +324,8 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
             Tint_12 = TintP11*T12_coh + TintP12*T22_coh
             Tint_21 = TintP21*T11_coh + TintP22*T21_coh
             Tint_22 = TintP21*T12_coh + TintP22*T22_coh
-        
-            kzd = 2*pi/lam*N[m+1]*cos(theta)*d[m]
+            
+            kzd = 2*pi/lam*N[m+1]*cos(th_list[m+1])*d[m]
             exp_2kd = exp(-2*kzd.imag)
             
             # restrict small values to avoid overflow
@@ -326,6 +341,7 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
             TintP21 = Tint_21*P11 + Tint_22*P21
             TintP22 = Tint_21*P12 + Tint_22*P22
         
+            th_0 = th_list[m+1]   # update angle of incidence
             Nmid = [N[m+1]];
             dmid = [];
         else :
@@ -342,8 +358,8 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     Nbw.reverse()
     dbw.reverse()
     
-    rmN,tmN = multilayer(lam,theta,Nfw, dfw,pol)[-2:]
-    rNm,tNm = multilayer(lam,theta,Nbw, dbw,pol)[-2:]
+    rmN,tmN = multilayer(lam,th_0,Nfw, dfw,pol)[-2:]
+    rNm,tNm = multilayer(lam,th_0,Nbw, dbw,pol)[-2:]
     
     T11_coh = 1/abs(tmN)**2;
     T12_coh = - abs(rNm)**2/abs(tmN)**2
@@ -359,21 +375,14 @@ def incoh_multilayer(lam,theta,N,d=(),pol='TM', coh_length=0):
     T = 1/Tint_11
     
     # get reflectivity and transmissivity
-    
-    # semi-infinite media left 
-    sinT0 = sin(theta)
-    cosT0 = sqrt(1 - sinT0**2)+1E-15
-
-    # semi-infinite media right
-    sinTn = N[0]*sinT0/N[-1]
-    cosTn = sqrt(1 - sinTn**2)+1E-15
-    
     if pol=='TE' :
         R = R
-        T = real(N[-1] *cosTn)/real(N[0] *cosT0)*T
+        T = real(     N[-1] *cos(th_list[-1]))/  \
+            real(     N[ 0] *cos(th_list[ 0]))*T
     elif pol=='TM' :
         R = R
-        T = real(conj(N[-1])*cosTn)/real(conj(N[0])*cosT0)*T
+        T = real(conj(N[-1])*cos(th_list[-1]))/  \
+            real(conj(N[ 0])*cos(th_list[ 0]))*T
 
     
     return R, T
@@ -416,3 +425,79 @@ def assert_multilayer_input(lam,d,N):
                 'each refractive must be either a float or an ndarray of size len(lam)'
     
     return lam, d
+
+#------------------------------------------------------------------
+# These are extra functions from TMM python code by Steve Byrnes
+# source https://github.com/sbyrnes321/tmm
+#------------------------------------------------------------------
+def is_forward_angle(n, theta):
+    """
+    if a wave is traveling at angle theta from normal in a medium with index n,
+    calculate whether or not this is the forward-traveling wave (i.e., the one
+    going from front to back of the stack, like the incoming or outgoing waves,
+    but unlike the reflected wave). For real n & theta, the criterion is simply
+    -pi/2 < theta < pi/2, but for complex n & theta, it's more complicated.
+    See https://arxiv.org/abs/1603.02720 appendix D. If theta is the forward
+    angle, then (pi-theta) is the backward angle and vice-versa.
+    """
+    assert n.real * n.imag >= 0, ("For materials with gain, it's ambiguous which "
+                                  "beam is incoming vs outgoing. See "
+                                  "https://arxiv.org/abs/1603.02720 Appendix C.\n"
+                                  "n: " + str(n) + "   angle: " + str(theta))
+    ncostheta = n * cos(theta)
+    if abs(ncostheta.imag) > 100 * EPSILON:
+        # Either evanescent decay or lossy medium. Either way, the one that
+        # decays is the forward-moving wave
+        answer = (ncostheta.imag > 0)
+    else:
+        # Forward is the one with positive Poynting vector
+        # Poynting vector is Re[n cos(theta)] for s-polarization or
+        # Re[n cos(theta*)] for p-polarization, but it turns out they're consistent
+        # so I'll just assume s then check both below
+        answer = (ncostheta.real > 0)
+    # convert from numpy boolean to the normal Python boolean
+    answer = bool(answer)
+    # double-check the answer ... can't be too careful!
+    error_string = ("It's not clear which beam is incoming vs outgoing. Weird"
+                    " index maybe?\n"
+                    "n: " + str(n) + "   angle: " + str(theta))
+    if answer is True:
+        assert ncostheta.imag > -100 * EPSILON, error_string
+        assert ncostheta.real > -100 * EPSILON, error_string
+        assert (n * cos(theta.conjugate())).real > -100 * EPSILON, error_string
+    else:
+        assert ncostheta.imag < 100 * EPSILON, error_string
+        assert ncostheta.real < 100 * EPSILON, error_string
+        assert (n * cos(theta.conjugate())).real < 100 * EPSILON, error_string
+    return answer
+
+def snell(n_1, n_2, th_1):
+    """
+    return angle theta in layer 2 with refractive index n_2, assuming
+    it has angle th_1 in layer with refractive index n_1. Use Snell's law. Note
+    that "angles" may be complex!!
+    """
+    # Important that the arcsin here is numpy.lib.scimath.arcsin, not
+    # numpy.arcsin! (They give different results e.g. for arcsin(2).)
+    th_2_guess = arcsin(n_1*np.sin(th_1) / n_2)
+    if is_forward_angle(n_2, th_2_guess):
+        return th_2_guess
+    else:
+        return pi - th_2_guess
+
+def list_snell(n_list, th_0):
+    """
+    return list of angle theta in each layer based on angle th_0 in layer 0,
+    using Snell's law. n_list is index of refraction of each layer. Note that
+    "angles" may be complex!!
+    """
+    # Important that the arcsin here is numpy.lib.scimath.arcsin, not
+    # numpy.arcsin! (They give different results e.g. for arcsin(2).)
+    angles = arcsin(n_list[0]*np.sin(th_0) / n_list)
+    # The first and last entry need to be the forward angle (the intermediate
+    # layers don't matter, see https://arxiv.org/abs/1603.02720 Section 5)
+    if not is_forward_angle(n_list[0], angles[0]):
+        angles[0] = pi - angles[0]
+    if not is_forward_angle(n_list[-1], angles[-1]):
+        angles[-1] = pi - angles[-1]
+    return angles
