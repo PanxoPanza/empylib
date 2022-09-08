@@ -22,7 +22,7 @@ def interface(theta,N1,N2, pol='TM'):
     Parameters
     ----------
     theta : ndarray or float
-        Angle of incidence in degrees.
+        Angle of incidence in radians.
         
     N1 : ndarray or float
         Spectral refractive index medium above the interface.
@@ -50,10 +50,6 @@ def interface(theta,N1,N2, pol='TM'):
         Transmission coeficient
     
     '''
-    
-    
-    theta = np.radians(theta) # conver degrees to radians
-    
     nn1, tt = meshgrid(N1,theta)
     nn2     = meshgrid(N2,theta)[0]
     
