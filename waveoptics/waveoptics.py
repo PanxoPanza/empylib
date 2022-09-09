@@ -276,8 +276,12 @@ def incoh_multilayer(lam,theta,Nlayer,d=(),pol='TM', coh_length=0):
     # store result into a list
     N = []
     for Ni in Nlayer:
-        if np.isscalar(Ni): Ni = np.ones(len(lam))*Ni
+        if np.isscalar(Ni): 
+            Ni = np.ones(len(lam))*Ni
+        else: 
+            assert len(Ni) == len(lam), 'refractive index must be either scalar or ndarray of size len(lam)'
         N.append(Ni)
+    
     Nmid = [N[0]];
     dmid = [];
 
