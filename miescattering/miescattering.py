@@ -220,7 +220,7 @@ def cross_section_at_lam(m,x,nmax = -1):
     #------------------------------------------------------------------
     (an, bn, py, Dy, xy, Gy) = get_coated_coefficients(m,x,nmax)
 
-    if imag(y) > 0 :
+    if imag(y) > 1E-8 :
         imy = 2*imag(y)
         ft = imy**2/(1 + (imy - 1)*exp(imy))
     else:

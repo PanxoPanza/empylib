@@ -77,7 +77,6 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     
     # Get extinction and scattering efficiency of the sphere
     qext, qsca = mie.scatter_efficiency(lam, N[1], Np, D)[:2]
-    
     qabs = qext - qsca # absorption efficiency
     
     Ac = pi*D**2/4 # cross section area of sphere
@@ -89,12 +88,12 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     for i in range(len(lam)):
         theta1[i] = wv.snell(N[0][i],N[1][i], theta)
         
-    Ttot = T*exp(-fv/Vp*cabs*tfilm/cos(theta1))
-    Tspec = T*exp(-fv/Vp*cext*tfilm/cos(theta1))
+    Ttot = T*exp(-fv/Vp*cabs*tfilm/cos(theta1.real))
+    Tspec = T*exp(-fv/Vp*cext*tfilm/cos(theta1.real))
     
     return Ttot, Tspec
 
-def ad_rad_transfer(lam,tfilm,N,fv,D,Np):
+def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
     '''
     Reflectivitiy and transmissivity from adding-doubling a film with spherical particles
 
@@ -106,7 +105,7 @@ def ad_rad_transfer(lam,tfilm,N,fv,D,Np):
     tfilm : float
         Film Thickness in microns.
         
-    N : tuple
+    Nlayers : tuple
         Refractive index above, in, and below the film. Length of 
         N must be 3.
         
@@ -130,15 +129,24 @@ def ad_rad_transfer(lam,tfilm,N,fv,D,Np):
 
     '''
     if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
-    assert len(N) == 3, 'length of N must be == 3'
-    if not np.isscalar(Np):
-        assert len(Np) == len(lam), 'Np must be either scalar or an ndarray of size len(lam)'
     
-    assert type(N[ 0]) is float, 'Only float is allowed for ref index at front'
-    assert type(N[-1]) is float, 'Only float is allowed for ref index at back'
+    # analize refractive index of layers
+    assert len(Nlayers) == 3, 'length of Nlayers must be == 3'
+    N = []
+    for Ni in Nlayers:
+        if np.isscalar(Ni): 
+            Ni = np.ones(len(lam))*Ni
+        else: 
+            assert len(Ni) == len(lam), 'Nlayers must either float or size len(lam)'
+        N.append(Ni)
     
-    Nh = N[1]    
-        
+    Nabove, Nh, Nbelow = N
+   
+    # check refractive index of particle
+    if np.isscalar(Np): 
+       Np = np.ones(len(lam))*Np
+    else: 
+        assert len(Np) == len(lam), 'Np must either float or size len(lam)'
     qext, qsca, gcos = mie.scatter_efficiency(lam,Nh,Np,D)
 
     # convertimos los resultados a secciones transversales
@@ -163,7 +171,8 @@ def ad_rad_transfer(lam,tfilm,N,fv,D,Np):
         b = mu_s/(mu_a+mu_s) * d
         
         # air / sample / air
-        s = iad.Sample(a=a, b=b, g=g, n=Nh[i].real, n_above=N[0], n_below=N[-1])
+        s = iad.Sample(a=a, b=b, g=g, 
+                       n=Nh[i].real, n_above=Nabove[i].real, n_below=Nbelow[i].real)
         ur1, ut1, uru, utu = s.rt()
         
         Rtot[i] = ur1
