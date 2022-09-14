@@ -405,6 +405,7 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
         Nh = np.ones(len(lam))*N_host 
     else: 
         assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
+        Nh = np.copy(N_host)
     
     
     m = Np/Nh                       # sphere layers
