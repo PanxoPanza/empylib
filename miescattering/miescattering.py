@@ -331,6 +331,7 @@ def scatter_efficiency(lam,N_host,Np_shells,D):
         Nh = np.ones(len(lam))*N_host 
     else: 
         assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
+        Nh = np.copy(N_host)
     
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
@@ -378,8 +379,33 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
     bn : ndarray
         Scattering coefficient N function
     '''
+    # convert input variables to list
+    if np.isscalar(lam) : lam = np.array([lam,])
+    if np.isscalar(D) : D = [D,]
+    if np.isscalar(Np_shells): Np_shells = [Np_shells,]
+    if type(Np_shells) is np.ndarray: Np_shells = [Np_shells,]
     
-     
+    assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
+    
+    # convert list to ndarrays
+    D = np.array(D)
+
+    # analize Np_shells and rearrange to ndarray if float
+    Np = []
+    for Ni in Np_shells:
+        if np.isscalar(Ni):            # convert to ndarray if float
+            Ni = np.ones(len(lam))*Ni
+        else: 
+            assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
+        Np.append(Ni)
+    Np = np.array(Np).reshape(len(D),len(lam))
+
+    # analyze N_host and rearrange to ndarray if float
+    if np.isscalar(N_host):             # convert to ndarray if float
+        Nh = np.ones(len(lam))*N_host 
+    else: 
+        assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
+    
     
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
