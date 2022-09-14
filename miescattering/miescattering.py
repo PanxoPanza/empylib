@@ -280,7 +280,7 @@ def cross_section_at_lam(m,x,nmax = -1):
     
     return Qext, Qsca, Asym, Qb, Qf, nmax, an, bn
 
-def scatter_efficiency(lam,Nh,Np,D):
+def scatter_efficiency(lam,N_host,Np_shells,D):
     
     '''
     Compute mie scattering parameters for multi-shell spherical object
@@ -289,9 +289,9 @@ def scatter_efficiency(lam,Nh,Np,D):
     ----------
     lam : ndarray
         wavelengtgh (microns)
-    Nh : ndarray
+    N_host : ndarray
         Complex refractive index of host
-    Np : tupple
+    Np_shells : tupple
         Complex refractive index of each shell layer
     D : tupple
         Outter diameter of each shell's layer (microns)
@@ -305,19 +305,38 @@ def scatter_efficiency(lam,Nh,Np,D):
     gcos : ndarray
         Asymmetry parameter
     '''
-    if np.isscalar(lam):    lam = np.array([lam])
-    if np.isscalar(D):      D = np.array([D])
-    if np.isscalar(Np):     Np = np.array([Np])
-    if Np.ndim == 1:        Np = Np.reshape(-1,len(Np))
+    # convert input variables to list
+    if np.isscalar(lam) : lam = np.array([lam,])
+    if np.isscalar(D) : D = [D,]
+    if np.isscalar(Np_shells): Np_shells = [Np_shells,]
+    if type(Np_shells) is np.ndarray: Np_shells = [Np_shells,]
     
-    assert len(lam) == Np.shape[1]
-    assert len(D)   == Np.shape[0]
+    assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
+    
+    # convert list to ndarrays
+    D = np.array(D)
+
+    # analize Np_shells and rearrange to ndarray if float
+    Np = []
+    for Ni in Np_shells:
+        if np.isscalar(Ni):            # convert to ndarray if float
+            Ni = np.ones(len(lam))*Ni
+        else: 
+            assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
+        Np.append(Ni)
+    Np = np.array(Np).reshape(len(D),len(lam))
+
+    # analyze N_host and rearrange to ndarray if float
+    if np.isscalar(N_host):             # convert to ndarray if float
+        Nh = np.ones(len(lam))*N_host 
+    else: 
+        assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
     
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
     kh = 2*pi*Nh/lam                # wavector in the host
     x = np.tensordot(kh,R,axes=0)   # size parameter
-
+    
     m = m.transpose()
     qext = np.zeros(len(lam))
     qsca = np.zeros(len(lam))
@@ -329,7 +348,7 @@ def scatter_efficiency(lam,Nh,Np,D):
         
     return qext, qsca, gcos
     
-def scatter_coeffients(lam,Nh,Np,D):
+def scatter_coeffients(lam,N_host,Np_shells,D):
     
     '''
     Compute mie scattering coefficients an and bn for multi-shell spherical 
@@ -340,11 +359,11 @@ def scatter_coeffients(lam,Nh,Np,D):
     lam : ndarray or float
         wavelengtgh (microns)
         
-    Nh : ndarray or float
+    N_host : ndarray or float
         Complex refractive index of host. If ndarray, the size must be equal to
         len(lam)
         
-    Np : ndarray
+    Np_shells : ndarray
         Complex refractive index of each shell layer. The number of elements
         must be equal to len(D). Each element should be, either, a float or a 
         ndarray of size (n,), where n = len(lam)
@@ -360,14 +379,7 @@ def scatter_coeffients(lam,Nh,Np,D):
         Scattering coefficient N function
     '''
     
-    # need to evalute if converting this to tuple
-    if np.isscalar(lam):    lam = np.array([lam])
-    if np.isscalar(D):      D = np.array([D])
-    if np.isscalar(Np):     Np = np.array([Np])
-    if Np.ndim == 1:        Np = Np.reshape(-1,len(Np))
-    
-    assert len(lam) == Np.shape[1]
-    assert len(D)   == Np.shape[0]
+     
     
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
