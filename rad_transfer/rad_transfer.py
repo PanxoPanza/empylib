@@ -104,7 +104,9 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
 
 def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
     '''
-    Reflectivitiy and transmissivity from adding-doubling a film with spherical particles
+    Reflectivitiy and transmissivity for a film with spherical particles. This 
+    function considers multiple scattering using adding-doubling method from 
+    iadpython library.
 
     Parameters
     ----------
