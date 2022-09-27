@@ -20,7 +20,10 @@ import iadpython as iad
 
 def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     '''
-    Transmittance from Beer-Lamberts law for a film with spherical particles
+    Transmittance and reflectance from Beer-Lamberts law for a film with 
+    spherical particles. Reflectance is cokmputed from classical formulas for 
+    incoherent light incident on a slab between two semi-infinite media 
+    (no scattering is considered for this parameter)
 
     Parameters
     ----------
@@ -31,7 +34,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
         Angle of incidence in radians.
         
     tfilm : float
-        Film Thickness in microns.
+        Film Thickness in milimiters.
         
     Nlayer : tuple
         Refractive index above, in, and below the film. Length of 
@@ -54,6 +57,9 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
         
     Tspec : ndarray
         Spectral specular transmisivity
+        
+    Rtot : ndarray
+        Spectral total reflectivity
 
     '''
     if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
@@ -71,9 +77,12 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
             assert len(Ni) == len(lam), 'refractive index must be either scalar or ndarray of size len(lam)'
         N.append(Ni)
     
-    Tp = wv.incoh_multilayer(lam, theta, N, tfilm, pol = 'TM')[1]
-    Ts = wv.incoh_multilayer(lam, theta, N, tfilm, pol = 'TE')[1]
-    T = (Ts + Tp)/2
+    tfilm = tfilm*1E3 # convert mm to micron units
+    
+    Rp, Tp = wv.incoh_multilayer(lam, theta, N, tfilm, pol = 'TM')
+    Rs, Ts = wv.incoh_multilayer(lam, theta, N, tfilm, pol = 'TE')
+    T    = (Ts + Tp)/2
+    Rtot = (Rp + Rs)/2
     
     # Get extinction and scattering efficiency of the sphere
     qext, qsca = mie.scatter_efficiency(lam, N[1], Np, D)[:2]
@@ -91,7 +100,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     Ttot = T*exp(-fv/Vp*cabs*tfilm/cos(theta1.real))
     Tspec = T*exp(-fv/Vp*cext*tfilm/cos(theta1.real))
     
-    return Ttot, Tspec
+    return Ttot, Tspec, Rtot
 
 def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
     '''
