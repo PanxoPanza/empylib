@@ -41,7 +41,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
         N must be 3.
         
     fv : float
-        Particle's volume fraction in %.
+        Particle's volume fraction.
         
     D : float
         Particle's diameter in microns
@@ -121,7 +121,7 @@ def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
         N must be 3.
         
     fv : float
-        Particle's volume fraction in %.
+        Particle's volume fraction.
         
     D : float
         Particle's diameter in microns
@@ -171,15 +171,17 @@ def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
     Rtot = np.zeros(lam.shape)
     Ttot = np.zeros(lam.shape)
     for i in range(len(lam)):
-        kz_imag = 2*np.pi/lam[i]*Nh[i].imag  # parte imaginaria del vector de onda
+        kz_imag = 2*np.pi/lam[i]*Nh[i].imag # parte imaginaria del vector de onda
         
-        mu_s = fv*Csca[i]/Vp  
+        mu_s = fv*Csca[i]/Vp 
         mu_a = fv*Cabs[i]/Vp + 2*kz_imag
         g = gcos[i]
-        d = tfilm
+        d = tfilm*1E3
         
-        a = mu_s/(mu_a+mu_s)
-        b = mu_s/(mu_a+mu_s) * d
+        if fv == 0: a, b = 0, 0
+        else:
+            a = mu_s/(mu_a+mu_s)
+            b = (mu_a+mu_s)*d
         
         # air / sample / air
         s = iad.Sample(a=a, b=b, g=g, 
