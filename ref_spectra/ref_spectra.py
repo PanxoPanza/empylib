@@ -118,52 +118,47 @@ def T_atmosphere(lam):
     
     return T_atm
     
-def Plank_BB(lam,T, unit = 'wavelength'):
+def Bplanck(lam,T, unit = 'wavelength'):
     '''
     Spectral Plank's black-body distribution
 
     Parameters
     ----------
-    lam : 1D float array (or scalar)s
-        wavelength in um.
+    lam : narray
+        wavelength (um).
     T : float value
-        Temperature of the distribution.
+        Temperature of the distribution (K).
 
     Returns
     -------
-    Ibb: 1D float array (or scalar)
-         Spectral irradiance in W/m^2-m (wavelength) W/m^2-Hz (frequency)
+    Ibb: ndarray
+         Spectral irradiance in W/m^2-um-sr (wavelength) W/m^2-Hz-sr (frequency)
     '''
     
     # define constants
-    c0 = em.speed_of_light  # m/s (speed of light)
-    hbar = em.hbar          # J*s (reduced planks constant)
-    h = 2*np.pi*hbar        # J*s (planks constant)
-    kB = em.kBoltzmann      # J/K (Boltzmann constant)
+    eV = em.e_charge
+    c0 = em.speed_of_light     # m/s (speed of light)
+    hbar = em.hbar          # eV*s (reduced planks constant)
+    h = 2*np.pi*hbar           # J*s (planks constant)
+    kB = em.kBoltzmann      # eV/K (Boltzmann constant)
     
     #-------------------------------------------------------------------------
-    # Plank distribution in W/m^2-m
+    # Plank distribution in W/m^2-m-sr
     #-------------------------------------------------------------------------
     if unit == 'wavelength': 
-        l = lam*1E-6 # change wavelength units to m
-        
-        # ll and TT are dim(T)xdim(l) arrays. ll runs in the column
-        ll, TT = np.meshgrid(l,T)
+        ll = lam*1E-6 # change wavelength units to m
         
         # compute planks distribbution
-        Ibb = 2*h*c0**2./ll**5*1/(np.exp(h*c0/(ll*TT*kB)) - 1)
+        Ibb = 2*h*c0**2./ll**5*1/(np.exp(h*c0/(ll*T*kB)) - 1)*1E-6
     
     #-------------------------------------------------------------------------
-    # Plank distribution in W/m^2-Hz
+    # Plank distribution in W/m^2-Hz-sr
     #-------------------------------------------------------------------------
     elif unit == 'frequency':
-        v = c0/lam*1E6      # convert wavelength to frequency (Hz)
-        
-        # vv and TT are dim(T)xdim(l) arrays. vv runs in the column
-        vv, TT = np.meshgrid(v,T)
+        vv = c0/lam*1E6      # convert wavelength to frequency (Hz)
         
         # compute planks distribbution
         Ibb = 2*h*vv**3/c0**2*          \
-              1/(np.exp(h*vv/(kB*TT)) - 1)
+              1/(np.exp(h*vv/(kB*T)) - 1)
     
     return Ibb

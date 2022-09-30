@@ -9,7 +9,7 @@ Created on Sun Nov  7 17:25:53 2021
 import os
 import platform
 import numpy as np 
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import interp1d
 from warnings import warn
 
 def get_nkfile(lam, MaterialName):
@@ -56,10 +56,10 @@ def get_nkfile(lam, MaterialName):
     assert data.shape[1] <= 3, 'wrong file format'
 
     # create complex refractive index using interpolation form nkfile
-    n = CubicSpline(data[:,0],data[:,1],extrapolate=False)
-    k = CubicSpline(data[:,0],data[:,2],extrapolate=False)
+    n = interp1d(data[:,0],data[:,1],bounds_error=False)
+    k = interp1d(data[:,0],data[:,2],bounds_error=False)
     
-    N = n(lam) + 1j*k(lam)
+    N = n(lam) + 1j*k(lam)*(k(lam)>=0)
     
     # Add a flat nk for extrapolated values (warn user)
     if lam[ 0] < data[ 0,0] :
