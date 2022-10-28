@@ -130,8 +130,14 @@ def Bplanck(lam,T, unit = 'wavelength'):
     ----------
     lam : narray
         wavelength (um).
+        
     T : float value
         Temperature of the distribution (K).
+        
+    unit string, optional
+        units for integration. Options are:
+            "wavelength" spectral irradiance in wavelength units (microns)
+            "frequency" spectral irradiance in frequency units (hertz)
 
     Returns
     -------
@@ -140,7 +146,6 @@ def Bplanck(lam,T, unit = 'wavelength'):
     '''
     
     # define constants
-    eV = em.e_charge
     c0 = em.speed_of_light     # m/s (speed of light)
     hbar = em.hbar          # eV*s (reduced planks constant)
     h = 2*np.pi*hbar           # J*s (planks constant)
