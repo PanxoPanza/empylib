@@ -100,7 +100,6 @@ class ColorSystem:
         out_fmt='html', the HTML hex string '#rrggbb' is returned.
 
         """
-
         rgb = self.T.dot(xyz)
         if np.any(rgb < 0):
             # We're not in the RGB gamut: approximate by desaturating

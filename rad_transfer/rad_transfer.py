@@ -28,13 +28,13 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     Parameters
     ----------
     lam : ndaray
-        Wavelength range in microns.
+        Wavelength range in microns (um).
         
     theta : float
-        Angle of incidence in radians.
+        Angle of incidence in radians (rad).
         
     tfilm : float
-        Film Thickness in milimiters.
+        Film Thickness in milimiters (mm).
         
     Nlayer : tuple
         Refractive index above, in, and below the film. Length of 
@@ -44,7 +44,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
         Particle's volume fraction.
         
     D : float
-        Particle's diameter in microns
+        Particle's diameter in microns (um)
     
     Np : ndarray or float
         Refractive index of particles. If ndarray, the size must be equal to
@@ -114,7 +114,7 @@ def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
         Wavelength range in microns.
         
     tfilm : float
-        Film Thickness in microns.
+        Film Thickness in milimiters.
         
     Nlayers : tuple
         Refractive index above, in, and below the film. Length of 
@@ -152,14 +152,14 @@ def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
         N.append(Ni)
     
     Nabove, Nh, Nbelow = N
-   
+    
     # check refractive index of particle
     if np.isscalar(Np): 
        Np = np.ones(len(lam))*Np
     else: 
         assert len(Np) == len(lam), 'Np must either float or size len(lam)'
     qext, qsca, gcos = mie.scatter_efficiency(lam,Nh,Np,D)
-
+    
     # convertimos los resultados a secciones transversales
     Ac = np.pi*D**2/4 # sección transversal de la partícula
     Csca = qsca*Ac
@@ -178,7 +178,7 @@ def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
         g = gcos[i]
         d = tfilm*1E3
         
-        if fv == 0: a, b = 0, 0
+        if mu_s == 0 and mu_a == 0: a, b = 0, 0
         else:
             a = mu_s/(mu_a+mu_s)
             b = (mu_a+mu_s)*d

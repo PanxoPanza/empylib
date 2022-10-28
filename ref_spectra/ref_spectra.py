@@ -69,7 +69,7 @@ def read_spectrafile(lam, MaterialName):
 
     return out, data
 
-def AM15(lam):
+def AM15(lam,spectra_type='global'):
     '''
     AM1.5 spectra
 
@@ -85,13 +85,17 @@ def AM15(lam):
     '''
     # interpolate values according to lam spectra
     lam = lam*1E3 # change units to nm
-    Isun =  read_spectrafile(lam,'AM15.txt')[0]
+    
+    if spectra_type == 'global':
+        Isun = read_spectrafile(lam,'AM15_Global.txt')[0]
+    elif spectra_type == 'direct':
+        Isun = read_spectrafile(lam,'AM15_Direct.txt')[0]
     
     # keep only positive values
     if not np.isscalar(Isun):
        Isun[Isun<0]=0
     
-    return Isun
+    return Isun*1E3  # spectra in W/m2 um
 
 def T_atmosphere(lam):
     '''

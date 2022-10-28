@@ -144,14 +144,27 @@ def drude(epsinf,wp,gamma,lam):
     --------------------------------------------------------------------
 '''
 
+#------------------------------------------------------------------------------
+#                                   Oxides
 # refractive index of SiO2
 SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 
 # refractive index of TiO2
 TiO2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
 
+
+#------------------------------------------------------------------------------
+#                                   Inorganics
+# refractive index of Silicon
+Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
+
+#------------------------------------------------------------------------------
+#                                   Metals
 # refractive index of Gold
 gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
+
+# refractive index of Silver
+silver = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017')[0]
 
 # refractive index of Copper
 Cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015')[0]
@@ -159,11 +172,21 @@ Cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015')[0]
 # refractive index of Aluminium
 Al   = lambda lam: get_nkfile(lam, 'al_Rakic1995')[0]
 
-# refractive index of Silver
-silver = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017')[0]
+#------------------------------------------------------------------------------
+#                                   Polymers
+# refractive index of HDPE
+HDPE  = lambda lam: get_nkfile(lam, 'HDPE_Palik')[0]
 
-# refractive index of Silicon
-Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
+# refractive index of HDPE
+PDMS  = lambda lam: get_nkfile(lam, 'PDMS_Zhang2020_Querry1987')[0]
 
+# refractive index of PMMA
+PMMA  = lambda lam: get_nkfile(lam, 'PMMA_Zhang2020')[0]
+
+# refractive index of PVDF-HFP
+PVDF  = lambda lam: get_nkfile(lam, 'PVDF-HFP_Mandal2018')[0]
+
+#------------------------------------------------------------------------------
+#                                   Others
 # refractive index of water
 H2O  = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
