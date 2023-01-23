@@ -138,6 +138,67 @@ def drude(epsinf,wp,gamma,lam):
     
     return np.sqrt(epsinf - wp**2/(w**2 + 1j*gamma*w))
 
+def emt_brugg(f1,nk_1,nk_2):
+    '''
+    Effective permitivity based on Bruggersman theory
+    
+        Parameters
+    ----------
+    nk_1: ndarray
+        refractive index of inclussions
+    
+    nk_2: ndarray
+        refractive index of host
+    
+    f1: float   
+        filling fraction of material eps1
+
+    Returns
+    -------
+    complex refractive index of effective media
+    '''
+    # check simple cases first
+    if f1 == 0:     # no inclusions
+        return nk_2
+    elif f1 == 1:   # no host
+        return nk_1
+
+    # prepare variables
+    f2 = 1 - f1
+    eps_1, eps_2 = nk_1**2, nk_2**2 # convert refractive index to dielectric constants
+    
+    # if eps_1 and eps_2 are scalar convert both to 1D ndarray
+    if np.isscalar(eps_1) and np.isscalar(eps_2):
+        eps_1 = np.array([eps_1,])
+        eps_2 = np.array([eps_2,])
+    
+    # else, scale the scalar variable with the ndarray. 
+    else: 
+        # eps_1 is scalar, create a constant array of len(eps_2)
+        if   np.isscalar(eps_1):
+            eps_1 = eps_1*np.ones(len(eps_2))
+        
+        # eps_2 is scalar, create a constant array of len(eps_1)
+        elif np.isscalar(eps_2):
+            eps_2 = eps_2*np.ones(len(eps_1))
+        
+        # if both are ndarrays, assert they are both equal length
+        else:
+            assert len(eps_1) == len(eps_2), 'size of eps_1 and eps_2 must be equal'
+
+    # compute effective dielectric constant ussing Bruggerman theory.
+    eps_m = 1/4.*((3*f1 - 1)*eps_1 + (3*f2 - 1)*eps_2                           \
+            - np.sqrt(((3*f1 - 1)*eps_1 + (3*f2 - 1)*eps_2)**2 + 8*eps_1*eps_2))
+    
+    for i in range(len(eps_m)):
+        if eps_m[i].imag < 0  or (eps_m[i].imag < 1E-10 and eps_m[i].real < 0):
+            eps_m[i] =  eps_m[i] + \
+                1/2*np.sqrt(((3*f1 - 1)*eps_1[i] + (3*f2 - 1)*eps_2[i])**2 \
+                + 8*eps_1[i]*eps_2[i]) 
+    
+    # if eps_1 and eps_2 were scalar, return a single scalar value
+    if len(eps_m) == 1: return np.sqrt(eps_m[0])
+    else :              return np.sqrt(eps_m)
 '''
     --------------------------------------------------------------------
                             Target functions
@@ -151,7 +212,6 @@ SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 
 # refractive index of TiO2
 TiO2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
-
 
 #------------------------------------------------------------------------------
 #                                   Inorganics

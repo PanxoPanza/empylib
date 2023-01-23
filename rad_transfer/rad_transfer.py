@@ -102,7 +102,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     
     return Ttot, Tspec, Rtot
 
-def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
+def ad_rad_transfer_sphere(lam,tfilm,Nlayers,fv,D,Np):
     '''
     Reflectivitiy and transmissivity for a film with spherical particles. This 
     function considers multiple scattering using adding-doubling method from 
@@ -192,3 +192,103 @@ def ad_rad_transfer(lam,tfilm,Nlayers,fv,D,Np):
         Ttot[i] = ut1
         
     return Rtot, Ttot
+
+def ad_rad_transfer(lam,tfilm,Nindex,fv,Csca,Cabs,gcos,Vp):
+    '''
+    Reflectivitiy and transmissivity for a film with spherical particles. This 
+    function considers multiple scattering using adding-doubling method from 
+    iadpython library.
+
+    Parameters
+    ----------
+    lam : ndaray
+        Wavelength range in microns.
+        
+    tfilm : float
+        Film Thickness in milimiters.
+        
+    Nindex : tuple
+        Refractive index above, in, and below the film. Length of N must be 3.
+        
+    fv : float
+        Particle's volume fraction.
+        
+    Csca : ndarray
+        Scattering cross section (um^2)
+
+    Cabs : ndarray
+        Absorption cross section (um^2)
+        
+    gcos : ndarray
+        Assymmetry parameter
+    
+    Vp : float
+        Effective volume of particle (um^3)
+
+    Returns
+    -------    
+    Rtot : ndarray
+        Spectral total reflectivity
+        
+    Ttot : ndarray
+        Spectral total transmisivity
+
+    '''
+    if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
+    
+    # analize refractive index of layers
+    assert len(Nindex) == 3, 'length of Nindex must be == 3'
+    N = []
+    for Ni in Nindex:
+        if np.isscalar(Ni): 
+            Ni = np.ones(len(lam))*Ni
+        else: 
+            assert len(Ni) == len(lam), 'Nindex must either float or size len(lam)'
+        N.append(Ni)
+    
+    Nabove, Nh, Nbelow = N
+    
+    # check scattering and absorption cross sections of particle
+    # ........... Scattering
+    if np.isscalar(Csca): 
+       Csca = np.ones(len(lam))*Csca
+    else: 
+        assert len(Csca) == len(lam), 'Csca must either float or size len(lam)'
+        
+    # ........... Absorption
+    if np.isscalar(Cabs): 
+       Cabs = np.ones(len(lam))*Cabs
+    else: 
+        assert len(Cabs) == len(lam), 'Cabs must either float or size len(lam)'
+        
+    # ........... Asymmetry parameter
+    if np.isscalar(gcos): 
+       gcos = np.ones(len(lam))*gcos
+    else: 
+        assert len(gcos) == len(lam), 'gcos must either float or size len(lam)'
+
+    # iteramos en iadpython
+    Rtot = np.zeros(lam.shape)
+    Ttot = np.zeros(lam.shape)
+    for i in range(len(lam)):
+        kz_imag = 2*np.pi/lam[i]*Nh[i].imag # parte imaginaria del vector de onda
+        
+        mu_s = fv*Csca[i]/Vp 
+        mu_a = fv*Cabs[i]/Vp + 2*kz_imag
+        g = gcos[i]
+        d = tfilm*1E3
+        
+        if mu_s == 0 and mu_a == 0: a, b = 0, 0
+        else:
+            a = mu_s/(mu_a+mu_s)
+            b = (mu_a+mu_s)*d
+        
+        # air / sample / air
+        s = iad.Sample(a=a, b=b, g=g, 
+                       n=Nh[i].real, n_above=Nabove[i].real, n_below=Nbelow[i].real)
+        ur1, ut1, uru, utu = s.rt()
+        
+        Rtot[i] = ur1
+        Ttot[i] = ut1
+        
+    return Rtot, Ttot    
