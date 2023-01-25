@@ -213,6 +213,12 @@ SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 # refractive index of TiO2
 TiO2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
 
+# refractive index of amorphous GeSbTe (GST)
+aGST = lambda lam: get_nkfile(lam, 'aGST_Du2016')[0]
+
+# refractive index of crystaline GeSbTe (GST)
+cGST = lambda lam: get_nkfile(lam, 'cGST_Du2016')[0]
+
 #------------------------------------------------------------------------------
 #                                   Inorganics
 # refractive index of Silicon
