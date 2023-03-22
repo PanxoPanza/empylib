@@ -102,10 +102,10 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     
     return Ttot, Tspec, Rtot
 
-def ad_rad_transfer_sphere(lam,tfilm,Nlayers,fv,D,Np):
+def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     '''
     Reflectivitiy and transmissivity for a film with spherical particles. This 
-    function considers multiple scattering using adding-doubling method from 
+    function considers multiple scattering using adding-doubling method (adm) from 
     iadpython library.
 
     Parameters
@@ -193,10 +193,10 @@ def ad_rad_transfer_sphere(lam,tfilm,Nlayers,fv,D,Np):
         
     return Rtot, Ttot
 
-def ad_rad_transfer(lam,tfilm,Nindex,fv,Csca,Cabs,gcos,Vp):
+def adm(lam,tfilm,Nindex,fv,Csca,Cabs,gcos,Vp):
     '''
-    Reflectivitiy and transmissivity for a film with spherical particles. This 
-    function considers multiple scattering using adding-doubling method from 
+    Reflectivitiy and transmissivity for a film with particles of arbitrary shape. This 
+    function considers multiple scattering using adding-doubling method (adm) from 
     iadpython library.
 
     Parameters

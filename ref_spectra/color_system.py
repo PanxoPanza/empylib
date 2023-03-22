@@ -186,16 +186,16 @@ class ColorSystem:
 
 illuminant_D65 = xyz_from_xy(0.3127, 0.3291)
 hdtv = ColorSystem(red=xyz_from_xy(0.67, 0.33),
-                       green=xyz_from_xy(0.21, 0.71),
-                       blue=xyz_from_xy(0.15, 0.06),
-                       white=illuminant_D65)
+                   green=xyz_from_xy(0.21, 0.71),
+                   blue=xyz_from_xy(0.15, 0.06),
+                   white=illuminant_D65)
 
 smpte = ColorSystem(red=xyz_from_xy(0.63, 0.34),
-                        green=xyz_from_xy(0.31, 0.595),
-                        blue=xyz_from_xy(0.155, 0.070),
-                        white=illuminant_D65)
+                    green=xyz_from_xy(0.31, 0.595),
+                    blue=xyz_from_xy(0.155, 0.070),
+                    white=illuminant_D65)
 
 srgb = ColorSystem(red=xyz_from_xy(0.64, 0.33),
-                       green=xyz_from_xy(0.30, 0.60),
-                       blue=xyz_from_xy(0.15, 0.06),
-                       white=illuminant_D65)
+                   green=xyz_from_xy(0.30, 0.60),
+                   blue=xyz_from_xy(0.15, 0.06),
+                   white=illuminant_D65)

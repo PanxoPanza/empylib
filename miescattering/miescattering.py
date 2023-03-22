@@ -177,7 +177,12 @@ def cross_section_at_lam(m,x,nmax = -1):
     Compute cross sections and mie coeficients for a given lambda
     The absorption, scattering, extinction and asymmetry parameter are 
     computed with the formulas for absorbing medium reported in 
-    Sun, Loeb & Fu. J. Quant. Spectrosc. Radiat. Transf. 83, 483–492 (2004).
+    
+    - Johnson, B. R. Light scattering by a multilayer sphere (1996). App. Opt., 
+        35(18), 3286.
+    
+    - Wu, Z. S.; Wang, Y. P. (1991). Electromagnetic scattering for 
+        multilayered sphere: Recursive algorithms. Science, 26(6), 1393–1401.
 
     Parameters
     ----------
