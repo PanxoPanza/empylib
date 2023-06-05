@@ -171,3 +171,28 @@ def Bplanck(lam,T, unit = 'wavelength'):
               1/(np.exp(h*vv/(kB*T)) - 1)
     
     return Ibb
+
+def yCIE_lum(lam):
+    '''
+    CIE photoscopic luminosity function from Stockman & Sharpe as a function of wavelength
+
+    Parameters
+    ----------
+    lam : 1D float array (or scalar)
+        wavelength in um.
+
+    Returns
+    -------
+    Interpolated CIE lum
+
+    '''
+    # interpolate values according to lam spectra
+    lam = lam*1E3 # change units to nm
+    
+    yCIE = read_spectrafile(lam,'CIE_lum.txt')[0]
+    
+    # keep only positive values
+    if not np.isscalar(yCIE):
+       yCIE[yCIE<0]=0
+    
+    return yCIE

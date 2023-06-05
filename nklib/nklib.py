@@ -219,6 +219,58 @@ GSTa = lambda lam: get_nkfile(lam, 'GSTa_Du2016')[0]
 # refractive index of crystaline GeSbTe (GST)
 GSTc = lambda lam: get_nkfile(lam, 'GSTc_Du2016')[0]
 
+# refractive index of crystaline GeSbTe (GST)
+GSTc = lambda lam: get_nkfile(lam, 'GSTc_Du2016')[0]
+
+
+# refractive index of Monoclinic(cold) Vanadium Dioxide (VO2M)
+# sputtered on SiO2 by default (film2)
+VO2M = lambda lam, film = 2: get_nkfile(lam, 'VO2M_Wan2019(film%i)' % film)[0]
+
+# refractive index of Rutile(hot) Vanadium Dioxide (VO2R)
+# sputtered on SiO2 by default (film2)
+VO2R = lambda lam, film = 2: get_nkfile(lam, 'VO2R_Wan2019(film%i)' % film)[0]
+
+def VO2(lam,T, film=2 , Tphc = 73, WT = 3.1):
+    '''
+    Refractive index of temperatura dependent VO2.
+    Reference: Wan, C. et al. Ann. Phys. 531, 1900188 (2019).
+
+    Parameters
+    ----------
+    lam : ndarray
+        Wavelength range (um).
+    T : float
+        Temperature of VO2 (°C).
+    film : int, optional
+        Film type according to reference (The default is 2):
+         - film 1: Si+native oxide/VO2(70nm) (Sputtered). 
+         - film 2: Si+native oxide/VO2(130nm) (Sputtered).
+         - film 3: Saphire/VO2(120nm) (Sputtered). 
+         - film 4: Si+native oxide/VO2(110nm) (Sol-gel). 
+    Tphc : float, optional
+        Transition temperature (°C). The default is 73.
+    WT : float, optional
+        Width of IMT phase change (ev). The default is 3.1.
+
+    Returns
+    -------
+    Complex refractive index
+
+    '''
+    # set constants
+    kB = 8.617333262E-5 # eV/K (Boltzmann constant)
+    Tphc = Tphc + 273   # convert °C to K
+    T = T + 273         # convert °C to K
+    
+    fv = 1/(1 + np.exp(WT/kB*(1/T - 1/Tphc)))
+    eps_c = VO2M(lam,film)**2
+    eps_h = VO2R(lam,film)**2
+    
+    eps = (1 - fv)*eps_c + fv*eps_h
+    
+    return np.sqrt(eps)
+
 #------------------------------------------------------------------------------
 #                                   Inorganics
 # refractive index of Silicon
