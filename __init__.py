@@ -6,7 +6,7 @@ from . import waveoptics
 from . import rad_transfer
 
 __version__ = "0.1.2"
-__author__ = 'Francisco Ramirez'
+__author__ = 'Francisco V. Ramirez-Cuevas'
 __credits__ = 'Universidad Adolfo Ibañez'
 
 # standard constants
