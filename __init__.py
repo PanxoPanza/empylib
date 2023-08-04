@@ -5,12 +5,15 @@ from . import miescattering
 from . import waveoptics
 from . import rad_transfer
 
+__version__ = "0.1.2"
+__author__ = 'Francisco Ramirez'
+__credits__ = 'Universidad Adolfo Ibañez'
+
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
 hbar = 1.0545718E-34            # J*s (plank's constan)
 speed_of_light = 299792458      # m/s (speed of light)
 kBoltzmann = 1.38064852E-23     # J/K (Boltzman constant)
-
 
 def convert_units(x, x_in, to):
     '''
