@@ -1,13 +1,17 @@
-import os
-from . import nklib
-from . import ref_spectra
-from . import miescattering
-from . import waveoptics
-from . import rad_transfer
-
-__version__ = "0.1.2"
+__title__ = 'empylib'
+__version__ = '0.0.2'
+__description__ = 'A python library for computational electromagnetics'
+__url__ = 'https://github.com/PanxoPanza/empylib'
 __author__ = 'Francisco V. Ramirez-Cuevas'
 __credits__ = 'Universidad Adolfo Ibañez'
+__build__ = 0
+__copyright__ = 'Copyright 2023 Francisco V. Ramirez-Cuevas'
+
+#from . import nklib
+#from . import ref_spectra
+#from . import miescattering
+#from . import waveoptics
+#from . import rad_transfer
 
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
@@ -15,6 +19,7 @@ hbar = 1.0545718E-34            # J*s (plank's constan)
 speed_of_light = 299792458      # m/s (speed of light)
 kBoltzmann = 1.38064852E-23     # J/K (Boltzman constant)
 
+# a function to convert units in electrodynamics
 def convert_units(x, x_in, to):
     '''
     Convert units of a variable. Accepted units for conversion are:

@@ -1,22 +1,33 @@
-from setuptools import find_packages, setup
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+import sys
+from distutils.core import setup
+
+PACKAGES = ['empylib']
+
+def get_init_val(val, packages=PACKAGES):
+    pkg_init = "%s/__init__.py" % PACKAGES[0]
+    value = '__%s__' % val
+    fn = open(pkg_init)
+    for line in fn.readlines():
+        if line.startswith(value):
+            return line.split('=')[1].strip().strip("'")
+
 setup(
-      name='empylib',
-      version='0.1.2',
-      description='Standard python library for computational electromagnetism',
-      author='Francisco V. Ramirez-Cuevas',
-      author_email='fvr@alumni.cmu.edu',
-      url='https://github.com/PanxoPanza/empylib.git',
-      packages=['empylib'],
-      license='MIT',
-      keywords='electromagnetism',
-      install_requires=['numpy', 
-                        'scipy', 
-                        'iadpython'
-                        ],
-      classifiers=[
-            "Programming Language :: Python :: 3",
-            "License :: OSI Approved :: MIT License",
-            "Operating System :: OS Independent",
-            ],
-      python_requires='>=3.6, <4',
-      )
+    name=get_init_val('title'),
+    version=get_init_val('version'),
+    description=get_init_val('description'),
+    long_description=open('README.md').read(),
+    author=get_init_val('author'),
+    url=get_init_val('url'),
+    package_data={'': ['LICENSE', 'NOTICE']},
+    license=get_init_val('license'),
+    keywords='electromagnetism',
+    install_requires=['numpy',
+                      'scipy',
+                      'iadpython'
+                      ],
+    packages=PACKAGES
+)
