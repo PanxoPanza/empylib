@@ -3,7 +3,6 @@ setup(
       name='empylib',
       version='0.1.2',
       description='Standard python library for computational electromagnetism',
-      #long_description=open('README.md').read() + '\n\n' + open('CHANGELOG.txt').read(),
       author='Francisco V. Ramirez-Cuevas',
       author_author_email='fvr@alumni.cmu.edu',
       url='https://github.com/PanxoPanza/empylib.git',
