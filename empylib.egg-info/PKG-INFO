@@ -4,6 +4,7 @@ Version: 0.1.2
 Summary: Standard python library for computational electromagnetism
 Home-page: https://github.com/PanxoPanza/empylib.git
 Author: Francisco V. Ramirez-Cuevas
+Author-email: fvr@alumni.cmu.edu
 License: MIT
 Keywords: electromagnetism
 Classifier: Programming Language :: Python :: 3

@@ -6,12 +6,14 @@ setup(
       author='Francisco V. Ramirez-Cuevas',
       author_email='fvr@alumni.cmu.edu',
       url='https://github.com/PanxoPanza/empylib.git',
-      packages=find_packages(),
+      packages=['empylib'],
       license='MIT',
       keywords='electromagnetism',
-      install_requires=['numpy', 'scipy', 'iadpython'
-          ],
-      classifiers = [
+      install_requires=['numpy', 
+                        'scipy', 
+                        'iadpython'
+                        ],
+      classifiers=[
             "Programming Language :: Python :: 3",
             "License :: OSI Approved :: MIT License",
             "Operating System :: OS Independent",
