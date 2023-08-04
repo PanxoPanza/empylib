@@ -4,10 +4,10 @@ setup(
       version='0.1.2',
       description='Standard python library for computational electromagnetism',
       author='Francisco V. Ramirez-Cuevas',
-      author_author_email='fvr@alumni.cmu.edu',
+      author_email='fvr@alumni.cmu.edu',
       url='https://github.com/PanxoPanza/empylib.git',
       packages=find_packages(),
-      licence='MIT',
+      license='MIT',
       keywords='electromagnetism',
       install_requires=['numpy', 'scipy', 'iadpython'
           ],
