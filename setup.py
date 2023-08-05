@@ -4,8 +4,10 @@
 import os
 import sys
 from distutils.core import setup
+from setuptools import find_packages
 
-PACKAGES = ['empylib']
+package_name = 'empylib' 
+PACKAGES = [package_name]
 
 def get_init_val(val, packages=PACKAGES):
     pkg_init = "%s/__init__.py" % PACKAGES[0]
@@ -22,12 +24,12 @@ setup(
     long_description=open('README.md').read(),
     author=get_init_val('author'),
     url=get_init_val('url'),
-    package_data={'': ['LICENSE', 'NOTICE']},
+    package_data={'': ['LICENSE', 'NOTICE', '*.nk', '*.txt']},
     license=get_init_val('license'),
     keywords='electromagnetism',
     install_requires=['numpy',
                       'scipy',
                       'iadpython'
                       ],
-    packages=PACKAGES
+    packages=find_packages(include=[package_name, package_name + '.*']),
 )
