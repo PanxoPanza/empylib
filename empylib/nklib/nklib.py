@@ -47,7 +47,6 @@ def get_nkfile(lam, MaterialName):
         dir_separator='\\'
 
     dir_path = os.path.dirname(__file__) + dir_separator
-    print(dir_path)
     filename = dir_path + MaterialName + '.nk'
    
     # check if file exist
