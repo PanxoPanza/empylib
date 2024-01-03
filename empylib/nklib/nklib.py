@@ -71,7 +71,9 @@ def get_nkfile(lam, MaterialName):
 
 def get_ri_info(lam,shelf,book,page):
     '''
-    Extract refractive index from refractiveindex.info database
+    Extract refractive index from refractiveindex.info database. This code
+    uses the refidx package from Bejamin Vial (https://gitlab.com/benvial/refidx)
+
     Parameters
     ----------
     lam : ndarray
@@ -251,8 +253,11 @@ TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
 # refractive index of ZnO
 ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry')[0]
 
-# refractive index of ZnO
+# refractive index of Alumina (AL2O3)
 Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o')[0]
+
+# refractive index of ZnS
+ZnS = lambda lam: get_ri_info(lam,'main','ZnS','Querry')[0]
 
 # refractive index of amorphous GeSbTe (GST)
 GSTa = lambda lam: get_nkfile(lam, 'GSTa_Du2016')[0]
