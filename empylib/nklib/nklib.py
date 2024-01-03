@@ -9,14 +9,13 @@ Created on Sun Nov  7 17:25:53 2021
 import os
 import platform
 import numpy as np 
-from scipy.interpolate import interp1d
+#from scipy.interpolate import interp1d
 from warnings import warn
 
 def get_nkfile(lam, MaterialName):
     '''
-    Reads an *.nk file and returns an interpolated
+    Reads a tabulated *.nk file and returns an interpolated
     1D numpy array with the complex refractive index
-    of the material
     
     Parameters
     ----------
@@ -33,7 +32,8 @@ def get_nkfile(lam, MaterialName):
         Original tabulated data from file
     '''
     # convert lambda to list
-    if np.isscalar(lam): lam = np.array([lam,])    
+    if np.isscalar(lam): 
+        lam = np.array([lam,])    
     
     # retrieve local path
     dir_separator = '\\' # default value
@@ -55,22 +55,57 @@ def get_nkfile(lam, MaterialName):
     data = np.genfromtxt(filename)
     assert data.shape[1] <= 3, 'wrong file format'
 
+    mat_data = {'wavelengths': data[:,0], 'index': data[:,1] + 1j*data[:,2]*(data[:,2] > 0)}
+
     # create complex refractive index using interpolation form nkfile
-    n = interp1d(data[:,0],data[:,1],bounds_error=False)
-    k = interp1d(data[:,0],data[:,2],bounds_error=False)
+    N = np.interp(lam, mat_data['wavelengths'],mat_data['index'])
     
-    N = n(lam) + 1j*k(lam)*(k(lam)>=0)
-    
-    # Add a flat nk for extrapolated values (warn user)
+    # warning if extrapolated values
     if lam[ 0] < data[ 0,0] :
         warn('Extrapolating from %.3f to %.3f' % (lam[0], data[0,0]))
-        N[lam <= data[ 0,0]] = data[ 0,1] + 1j*data[ 0,2]
         
     if lam[-1] > data[-1,0] :
         warn('Extrapolating from %.3f to %.3f' % (data[-1,0], lam[-1]))
-        N[lam >= data[-1,0]] = data[-1,1] + 1j*data[-1,2]
     
-    return N, data
+    return N, mat_data
+
+def get_ri_info(lam,shelf,book,page):
+    '''
+    Extract refractive index from refractiveindex.info database
+    Parameters
+    ----------
+    lam : ndarray
+        Wavelengths to interpolate (um).
+    shelf : string
+        Name of the shelf (main, organic, glass, other, 3D)
+    book : string
+        Material name
+    page: string
+        Refractive index source   
+
+    Returns
+    -------
+    N : ndarray
+        Interpolated complex refractive index
+    data: ndarray
+        Original tabulated data from file
+    '''
+
+    import refidx as ri
+    db = ri.DataBase()
+    mat = db.materials[shelf][book][page]
+    matLambda = np.array(mat.material_data["wavelengths"])
+    matN = np.array(mat.material_data["index"])
+    N = np.interp(lam, matLambda, matN)
+    
+    # warning if extrapolated values
+    if lam[ 0] < matLambda[ 0] :
+        warn('Extrapolating from %.3f to %.3f' % (lam[0], matLambda[ 0]))
+        
+    if lam[-1] > matLambda[-1] :
+        warn('Extrapolating from %.3f to %.3f' % (matLambda[-1], lam[-1]))
+    
+    return N, mat.material_data
 
 '''
     --------------------------------------------------------------------
@@ -211,7 +246,13 @@ def emt_brugg(f1,nk_1,nk_2):
 SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
 
 # refractive index of TiO2
-TiO2 = lambda lam: get_nkfile(lam, 'tio2_Siefke2015')[0]
+TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
+
+# refractive index of ZnO
+ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry')[0]
+
+# refractive index of ZnO
+Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o')[0]
 
 # refractive index of amorphous GeSbTe (GST)
 GSTa = lambda lam: get_nkfile(lam, 'GSTa_Du2016')[0]
@@ -299,7 +340,7 @@ HDPE  = lambda lam: get_nkfile(lam, 'HDPE_Palik')[0]
 PDMS  = lambda lam: get_nkfile(lam, 'PDMS_Zhang2020_Querry1987')[0]
 
 # refractive index of PMMA
-PMMA  = lambda lam: get_nkfile(lam, 'PMMA_Zhang2020')[0]
+PMMA = lambda lam: get_ri_info(lam,'organic','(C5H8O2)n - poly(methyl methacrylate)','Zhang-Tomson')[0]
 
 # refractive index of PVDF-HFP
 PVDF  = lambda lam: get_nkfile(lam, 'PVDF-HFP_Mandal2018')[0]

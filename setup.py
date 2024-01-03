@@ -29,7 +29,8 @@ setup(
     keywords='electromagnetism',
     install_requires=['numpy',
                       'scipy',
-                      'iadpython'
+                      'iadpython',
+                      'refidx'
                       ],
     packages=find_packages(include=[package_name, package_name + '.*']),
 )
