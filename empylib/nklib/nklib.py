@@ -9,8 +9,19 @@ Created on Sun Nov  7 17:25:53 2021
 import os
 import platform
 import numpy as np 
-#from scipy.interpolate import interp1d
+from scipy.integrate import quad
 from warnings import warn
+from .. import convert_units
+from typing import Callable # used to check callable variables
+import pandas as pd
+
+def _ndarray_check(x):
+    '''
+    check if x is not ndarray. If so, convert x to a 1d ndarray
+    '''
+    if not isinstance(x, np.ndarray):
+        return np.array([x]), True
+    return x, False
 
 def get_nkfile(lam, MaterialName):
     '''
@@ -31,9 +42,8 @@ def get_nkfile(lam, MaterialName):
     data: ndarray
         Original tabulated data from file
     '''
-    # convert lambda to list
-    if np.isscalar(lam): 
-        lam = np.array([lam,])    
+    # check if lam is not ndarray
+    lam, lam_isfloat = _ndarray_check(lam)   
     
     # retrieve local path
     dir_separator = '\\' # default value
@@ -67,7 +77,8 @@ def get_nkfile(lam, MaterialName):
     if lam[-1] > data[-1,0] :
         warn('Extrapolating from %.3f to %.3f' % (data[-1,0], lam[-1]))
     
-    return N, mat_data
+    # if lam was float (orginaly), convert N to a complex value
+    return complex(N[0]) if lam_isfloat else N, mat_data
 
 def get_ri_info(lam,shelf,book,page):
     '''
@@ -114,6 +125,173 @@ def get_ri_info(lam,shelf,book,page):
                     dielectric constant models
     --------------------------------------------------------------------
 '''
+def eps_lorentz(A,gamma,E0,lam):
+    '''
+    Lorentz oscillator model for dielectric constant based on
+    parameters from ellipsometry measurements.
+
+    Parameters
+    ----------
+    A   : float
+        Oscillator's amplitude  
+    
+    gamma  : float
+        Broadening of the oscillator(eV)
+    
+    E0  : float
+        Oscillator's resonant energy (eV)
+        
+    lam : ndarray
+        Wavelengths range (um)
+
+    Returns
+    -------
+    eps : ndarray (complex)
+        Complex dielectric constant
+    '''
+
+    wp = np.sqrt(A*gamma*E0)
+    return lorentz(0,wp,E0,gamma,lam)**2
+
+def eps_gaussian(A,Br,E0,lam):
+    '''
+    Gaussian oscillator model for dielectric constant based on
+    parameters from ellipsometry measurements. The model first calculates
+    the imaginary part of epsilon, and the retrieves the real component
+    using Krammers-Kronig model.
+
+    Parameters
+    ----------
+    A   : float
+        Absorption amplitude  
+    
+    Br  : float
+        Broadening (eV)
+    
+    E0  : float
+        Oscillator energy (eV)
+
+    lam : ndarray
+        Wavelengths range (um)
+
+    Returns
+    -------
+    eps : ndarray (complex)
+        Complex dielectric constant
+    '''
+
+    #  Gauss model as function of E (in eV)
+    f = 0.5/np.sqrt(np.log(2)) # scaling constant
+    eps_G = lambda E: A*np.exp(-(f*(E - E0)/Br)**2) \
+                    - A*np.exp(-(f*(E + E0)/Br)**2)
+
+    # get real and imaginary part of dielectric constant
+    E = convert_units(lam,'um','eV')                               # lambda range in eV
+    a, b = max(E0 - 5*Br,0), E0 + 5*Br                             # integration range
+    eps_re = eps_real_kkr(lam,eps_G,int_range=(a, b), cshift=1e-4) # get real part from KK
+    eps_im = eps_G(E)                                              # imaginary component
+
+    return eps_re + 1j*eps_im
+
+def eps_tauc_lorentz(A,C,E0,Eg,lam):
+    '''
+    Tauc-Lorentz oscillator model for dielectric constant based on
+    parameters from ellipsometry measurements.
+
+    Parameters
+    ----------
+    A   : float
+        Oscillator's amplitude  
+    
+    C  : float
+        Broadening of the oscillator(eV)
+    
+    E0  : float
+        Oscillator's resonant energy (eV)
+
+    Eg  : float
+        Bandgap (eV)
+        
+    lam : ndarray
+        Wavelengths range (um)
+
+    Returns
+    -------
+    eps : ndarray (complex)
+        Complex dielectric constant
+    '''
+    #  Tauc-Lorentz model as function of E (in eV)
+    eps_TL = lambda E: 1/E*A*E0*C*(E - Eg)**2/ \
+                 ((E**2 - E0**2)**2 + C**2*E**2)*(E > Eg)
+    
+    # get real and imaginary part of dielectric constant
+    E = convert_units(lam,'um','eV')                                # lambda range in eV
+    a, b = Eg, Eg + 20*C                                            # set integration range
+    eps_re = eps_real_kkr(lam,eps_TL,int_range=(a, b), cshift=1e-3) # get real part from KK
+    eps_im = eps_TL(E)                                              # imaginary component
+    
+    #------------------------------------------------------------------------------
+    # # Alternative form (didn't work)
+    #------------------------------------------------------------------------------
+    # source: Luis V. Rodríguez-de Marcos and Juan I. Larruquert, 
+    #           "Analytic optical-constant model derived from Tauc-Lorentz and Urbach tail," 
+    #           Opt. Express 24, 28561-28572 (2016)
+    # a = 0.09
+    # b = E + 1j*a
+    # d = np.sqrt(E0**2 - (C/2)**2) - 1j*C/2
+    # F = lambda x,y,z: ((Eg + x)**2*np.log(Eg + x) - (Eg - x)**2*np.log(Eg - x))/ \
+    #                     x*(x**2 - y**2)*(x**2 - z**2)
+
+    # eps = 1 + A*E0*C/np.pi*(F(b,d,d.conjugate())) + F(d,d.conjugate(),b) + F(d.conjugate(),b,d)
+    #------------------------------------------------------------------------------
+
+    return eps_re + 1j*eps_im
+
+def eps_ellipsometry(oscilator_file, lam):
+    '''
+    Computes dielectric constant using ellipsometry fitting parameters.
+    
+    Parameters
+    ----------
+    oscilator_file   : csv file
+        File containing the ellisometry fitting parameters, sorted as:
+
+            type | A | E0 (eV) | C (eV) | Eg (eV) | Br (eV) | gamma (eV)
+        
+        where:
+            - type: oscillator model (Tauc-Lorentz, Gauss, Lorentz)
+            - A: Amplitude of oscillator
+            - E0: resonant energy (apply to all models)
+            - C: Tauc-Lorentz broadening (0 otherwise)
+            - Eg: Tauc-Lorentz Bandgap (0 otherwise)
+            - Br: Gauss model broadening (0 otherwise)
+            - gamma: Lorentz model decay (0 otherwise)
+    
+    lam  : ndarray or float
+        Wavelength range (um)
+
+    Returns
+    -------
+    eps : ndarray (complex)
+        Complex dielectric constant
+    '''
+    
+    ellip_data = pd.read_csv(oscilator_file)
+    eps = complex(0,0)
+    for idx, oscillator in ellip_data.iterrows():
+        model, A, E0, C, Eg, Br, gamma = oscillator
+        if model == 'Tauc-Lorentz':
+            eps += eps_tauc_lorentz(A,C,E0,Eg,lam)
+            
+        if model == 'Gaussian':
+            eps += eps_gaussian(A,Br,E0,lam)
+            
+        elif model == 'Lorentz':
+            eps += eps_lorentz(A,gamma,E0,lam)
+    
+    return eps
+
+
 def lorentz(epsinf,wp,wn,gamma,lam):
     '''
     Refractive index from Lorentz model
@@ -136,12 +314,7 @@ def lorentz(epsinf,wp,wn,gamma,lam):
     complex refractive index
 
     '''
-    # define constants
-    eV = 1.602176634E-19          # eV to J (conversion)
-    hbar = 1.0545718E-34          # J*s (plank's constan)
-    
-    
-    w = 2*np.pi*3E14/lam*hbar/eV  # conver from um to eV 
+    w = convert_units(lam,'um','eV')  # conver from um to eV 
     
     return np.sqrt(epsinf + wp**2/(wn**2 - w**2 - 1j*gamma*w))
 
@@ -204,24 +377,21 @@ def emt_brugg(f1,nk_1,nk_2):
     f2 = 1 - f1
     eps_1, eps_2 = nk_1**2, nk_2**2 # convert refractive index to dielectric constants
     
-    # if eps_1 and eps_2 are scalar convert both to 1D ndarray
-    if np.isscalar(eps_1) and np.isscalar(eps_2):
-        eps_1 = np.array([eps_1,])
-        eps_2 = np.array([eps_2,])
+    # check if eps_1 or eps_2 are scalar and convert both to 1D ndarray
+    eps_1, eps_1_isscalar = _ndarray_check(eps_1)
+    eps_2, eps_2_isscalar = _ndarray_check(eps_2)
+
+    # eps_1 is scalar, create a constant array of len(eps_2)
+    if   eps_1_isscalar and not eps_2_isscalar:
+        eps_1 = eps_1*np.ones_like(eps_2)
+        
+    # eps_2 is scalar, create a constant array of len(eps_1)
+    elif not eps_1_isscalar and eps_2_isscalar:
+        eps_2 = eps_2*np.ones_like(eps_1)
     
-    # else, scale the scalar variable with the ndarray. 
-    else: 
-        # eps_1 is scalar, create a constant array of len(eps_2)
-        if   np.isscalar(eps_1):
-            eps_1 = eps_1*np.ones(len(eps_2))
-        
-        # eps_2 is scalar, create a constant array of len(eps_1)
-        elif np.isscalar(eps_2):
-            eps_2 = eps_2*np.ones(len(eps_1))
-        
-        # if both are ndarrays, assert they are both equal length
-        else:
-            assert len(eps_1) == len(eps_2), 'size of eps_1 and eps_2 must be equal'
+    # both are ndarrays, assert they have same length
+    else:
+        assert len(eps_1) == len(eps_2), 'size of eps_1 and eps_2 must be equal'
 
     # compute effective dielectric constant ussing Bruggerman theory.
     eps_m = 1/4.*((3*f1 - 1)*eps_1 + (3*f2 - 1)*eps_2                           \
@@ -236,6 +406,66 @@ def emt_brugg(f1,nk_1,nk_2):
     # if eps_1 and eps_2 were scalar, return a single scalar value
     if len(eps_m) == 1: return np.sqrt(eps_m[0])
     else :              return np.sqrt(eps_m)
+
+
+
+
+def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-12):
+    '''
+    Computes real part of dielectric constant from its imaginary components 
+    using Krammers-Kronig relation
+
+    Parameters
+    ----------
+    lam: ndarray or float
+         wavelength spectrum (in microns)
+    
+    eps_imag: ndarray, float or callable 
+              imaginary component of refractive index (if ndarray, it must be same size as lam)
+    
+    eps_inf: float (default 0)
+             dielectric constant at infinity
+    
+    int_range: 2D tupple (default 0, inf) 
+               integration range (only for eps_inf is callable)
+    
+    cshift: float
+            Small value to avoid singularity at integration
+
+    Returns
+    -------
+    eps_real: ndarray or float
+              real part of dielectric constant
+    '''
+    lam, lam_isfloat = _ndarray_check(lam)
+    cshift = complex(0, cshift)
+    w_i = convert_units(lam,'um', 'eV')
+
+    if  isinstance(eps_imag, Callable):
+        a, b = int_range # set integration range
+        def integration_element(w_r):
+            factor = lambda w: w / (w**2 - w_r**2 + cshift)
+            real_int = lambda w: (eps_imag(w) * factor(w)).real
+            imag_int = lambda w: (eps_imag(w) * factor(w)).imag
+            total = quad(real_int, a,b)[0] + 1j*quad(imag_int, a,b)[0]
+            return eps_inf + (2/np.pi)*total
+        
+    elif isinstance(eps_imag, np.ndarray) or isinstance(eps_imag,float):
+        eps_imag = _ndarray_check(eps_imag)[0]
+        assert lam.shape == eps_imag.shape, 'input arrays must be same length'
+    
+        def integration_element(w_r):
+            factor = - w_i / (w_i**2 - w_r**2 + cshift) # integration domains are swaped, so a "-"" sign is added
+            total = np.trapz(eps_imag * factor, x=w_i)
+            return eps_inf + (2/np.pi)*total
+    else:
+        raise TypeError('Unknown type for eps_imag')
+    
+    eps_real = np.real([integration_element(w_r) for w_r in w_i]).reshape(-1)
+    
+    if lam.shape == (1,):
+        return float(eps_real[0])
+    return float(eps_real[0]) if lam_isfloat else eps_real 
 '''
     --------------------------------------------------------------------
                             Target functions
@@ -252,6 +482,9 @@ TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
 
 # refractive index of ZnO
 ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry')[0]
+
+# refractive index of MgO
+MgO = lambda lam: get_nkfile(lam,'MgO_Synowicki2005')[0]
 
 # refractive index of Alumina (AL2O3)
 Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o')[0]
