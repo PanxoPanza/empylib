@@ -30,7 +30,8 @@ setup(
     install_requires=['numpy',
                       'scipy',
                       'iadpython',
-                      'refidx'
+                      'refidx',
+                      'pandas'
                       ],
     packages=find_packages(include=[package_name, package_name + '.*']),
 )
