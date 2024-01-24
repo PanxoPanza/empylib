@@ -226,7 +226,7 @@ def eps_tauc_lorentz(A,C,E0,Eg,lam):
     
     # get real and imaginary part of dielectric constant
     E = convert_units(lam,'um','eV')                                # lambda range in eV
-    a, b = Eg, Eg + 20*C                                            # set integration range
+    a, b = Eg-20*C, Eg + 20*C                                            # set integration range
     eps_re = eps_real_kkr(lam,eps_TL,int_range=(a, b), cshift=1e-3) # get real part from KK
     eps_im = eps_TL(E)                                              # imaginary component
     
