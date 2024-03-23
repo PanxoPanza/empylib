@@ -64,7 +64,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     '''
     if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
 
-    assert isinstance(Nlayers, tuple), 'Nlayers must be on tuple format of dim = 3'
+    assert isinstance(Nlayer, tuple), 'Nlayers must be on tuple format of dim = 3'
     assert len(Nlayer) == 3, 'length of Nlayer must be == 3'
     if not np.isscalar(Np):
         assert len(Np) == len(lam), 'Np must be either scalar or an ndarray of size len(lam)'
