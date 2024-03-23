@@ -220,6 +220,8 @@ def eps_tauc_lorentz(A,C,E0,Eg,lam):
     eps : ndarray (complex)
         Complex dielectric constant
     '''
+    # este es un comentario
+    
     #  Tauc-Lorentz model as function of E (in eV)
     eps_TL = lambda E: 1/E*A*E0*C*(E - Eg)**2/ \
                  ((E**2 - E0**2)**2 + C**2*E**2)*(E > Eg)

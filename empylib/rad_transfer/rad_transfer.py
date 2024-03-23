@@ -55,15 +55,17 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     Ttot : ndarray
         Spectral total transmisivity
         
-    Tspec : ndarray
-        Spectral specular transmisivity
-        
     Rtot : ndarray
         Spectral total reflectivity
+        
+    Tspec : ndarray
+        Spectral specular transmisivity
 
     '''
     if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
-    assert len(Nlayer) == 3, 'length of N must be == 3'
+
+    assert isinstance(Nlayers, tuple), 'Nlayers must be on tuple format of dim = 3'
+    assert len(Nlayer) == 3, 'length of Nlayer must be == 3'
     if not np.isscalar(Np):
         assert len(Np) == len(lam), 'Np must be either scalar or an ndarray of size len(lam)'
     
@@ -100,7 +102,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     Ttot = T*exp(-fv/Vp*cabs*tfilm/cos(theta1.real))
     Tspec = T*exp(-fv/Vp*cext*tfilm/cos(theta1.real))
     
-    return Ttot, Tspec, Rtot
+    return Ttot, Rtot, Tspec
 
 def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     '''
@@ -132,66 +134,34 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
 
     Returns
     -------    
-    Rtot : ndarray
-        Spectral total reflectivity
-        
     Ttot : ndarray
         Spectral total transmisivity
 
+    Rtot : ndarray
+        Spectral total reflectivity    
+
+    Tspec : ndarray
+        Spectral specular transmisivity
+        
+    Rspec : ndarray
+        Spectral specular reflectivity
     '''
-    if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
-    
-    # analize refractive index of layers
-    assert len(Nlayers) == 3, 'length of Nlayers must be == 3'
-    N = []
-    for Ni in Nlayers:
-        if np.isscalar(Ni): 
-            Ni = np.ones(len(lam))*Ni
-        else: 
-            assert len(Ni) == len(lam), 'Nlayers must either float or size len(lam)'
-        N.append(Ni)
-    
-    Nabove, Nh, Nbelow = N
-    
-    # check refractive index of particle
-    if np.isscalar(Np): 
-       Np = np.ones(len(lam))*Np
-    else: 
-        assert len(Np) == len(lam), 'Np must either float or size len(lam)'
+    # here we only verify that length of Nlayers is 3
+    assert isinstance(Nlayers, tuple), 'Nlayers must be on tuple format of dim = 3'
+    assert len(Nlayers) == 3,         'Number of layers must be 3'
+
+    # get scattering efficiency and asymmetry parameter
+    Nh = Nlayers[1]
     qext, qsca, gcos = mie.scatter_efficiency(lam,Nh,Np,D)
     
-    # convertimos los resultados a secciones transversales
-    Ac = np.pi*D**2/4 # sección transversal de la partícula
-    Csca = qsca*Ac
-    Cext = qext*Ac
-    Cabs = Cext - Csca
-    Vp = np.pi*D**3/6
+    # convert results to cross sections
+    Ac = np.pi*D**2/4  # cross section area (um2)
+    Csca = qsca*Ac     # scattering cross section (um2)
+    Cext = qext*Ac     # extinction cross section (um2)
+    Cabs = Cext - Csca # absorption cross section (um2)
+    Vp = np.pi*D**3/6  # particle volume (um^3)
 
-    # iteramos en iadpython
-    Rtot = np.zeros(lam.shape)
-    Ttot = np.zeros(lam.shape)
-    for i in range(len(lam)):
-        kz_imag = 2*np.pi/lam[i]*Nh[i].imag # parte imaginaria del vector de onda
-        
-        mu_s = fv*Csca[i]/Vp 
-        mu_a = fv*Cabs[i]/Vp + 2*kz_imag
-        g = gcos[i]
-        d = tfilm
-        
-        if mu_s == 0 and mu_a == 0: a, b = 0, 0
-        else:
-            a = mu_s/(mu_a+mu_s)
-            b = (mu_a+mu_s)*d*1E3
-        
-        # air / sample / air
-        s = iad.Sample(a=a, b=b, g=g, d=d,
-                       n=Nh[i].real, n_above=Nabove[i].real, n_below=Nbelow[i].real)
-        ur1, ut1, uru, utu = s.rt()
-        
-        Rtot[i] = ur1
-        Ttot[i] = ut1
-        
-    return Rtot, Ttot
+    return adm(lam,tfilm,Nlayers,fv,Csca,Cabs,gcos,Vp)
 
 def adm(lam,tfilm,Nindex,fv,Csca,Cabs,gcos,Vp):
     '''
@@ -227,17 +197,25 @@ def adm(lam,tfilm,Nindex,fv,Csca,Cabs,gcos,Vp):
 
     Returns
     -------    
-    Rtot : ndarray
-        Spectral total reflectivity
-        
     Ttot : ndarray
         Spectral total transmisivity
+
+    Rtot : ndarray
+        Spectral total reflectivity    
+
+    Tspec : ndarray
+        Spectral specular transmisivity
+        
+    Rspec : ndarray
+        Spectral specular reflectivity
 
     '''
     if np.isscalar(lam): lam = np.array([lam]) # convert lam to ndarray
     
     # analize refractive index of layers
+    assert isinstance(Nindex, tuple), 'Nindex must be a tuple of dim = 3'
     assert len(Nindex) == 3, 'length of Nindex must be == 3'
+
     N = []
     for Ni in Nindex:
         if np.isscalar(Ni): 
@@ -267,28 +245,36 @@ def adm(lam,tfilm,Nindex,fv,Csca,Cabs,gcos,Vp):
     else: 
         assert len(gcos) == len(lam), 'gcos must either float or size len(lam)'
 
-    # iteramos en iadpython
-    Rtot = np.zeros(lam.shape)
-    Ttot = np.zeros(lam.shape)
+    # iterate using iadpython
+    Ttot = np.empty_like(lam)
+    Rtot = np.empty_like(lam)
+    Tspec = np.empty_like(lam)
+    Rspec = np.empty_like(lam)
     for i in range(len(lam)):
-        kz_imag = 2*np.pi/lam[i]*Nh[i].imag # parte imaginaria del vector de onda
-        
-        mu_s = fv*Csca[i]/Vp 
-        mu_a = fv*Cabs[i]/Vp + 2*kz_imag
-        g = gcos[i]
-        d = tfilm
+        kz_imag = 2*np.pi/lam[i]*Nh[i].imag*1E3 # imaginary part of wavevector (mm^-1)
+        mu_s = fv*Csca[i]/Vp*1E3                # scattering coefficient (mm^-1) 
+        mu_a = fv*Cabs[i]/Vp + 2*kz_imag        # absorption coefficient (mm^-1)
+        g = gcos[i]                             # asymmetry parameter
+        d = tfilm                               # film thickness (mm)
         
         if mu_s == 0 and mu_a == 0: a, b = 0, 0
         else:
             a = mu_s/(mu_a+mu_s)
-            b = (mu_a+mu_s)*d*1E3
+            b = (mu_a+mu_s)*d
         
-        # air / sample / air
+        # Set sample for adding-doubling simulation
         s = iad.Sample(a=a, b=b, g=g, d=d,  
                        n=Nh[i].real, n_above=Nabove[i].real, n_below=Nbelow[i].real)
-        ur1, ut1, uru, utu = s.rt()
+
+        # compute total components (only at normal incidence)
+        r_tot_1, t_tot_1, r_tot_all, t_tot_all = s.rt() # discard components at all incidenct angles 
+
+        # compute specular (unscattered) componentes
+        r_spec, t_spec = s.unscattered_rt()
         
-        Rtot[i] = ur1
-        Ttot[i] = ut1
+        Rtot[i] = r_tot_1
+        Ttot[i] = t_tot_1
+        Rspec[i] = r_spec
+        Tspec[i] = t_spec
         
-    return Rtot, Ttot    
+    return Ttot, Rtot, Tspec, Rspec    

@@ -8,7 +8,7 @@ import numpy as np
 from numpy import pi, exp, conj, imag, real, sqrt
 from scipy.special import jv, yv
 
-def log_RicattiBessel(x,nmax,nmx):
+def _log_RicattiBessel(x,nmax,nmx):
     '''
     Computes the logarithmic derivatives of Ricatti-Bessel functions,
         Dn(x) = psi_n'(x) / psi_n(x),
@@ -82,14 +82,14 @@ def log_RicattiBessel(x,nmax,nmx):
                                   
     return Dnx[:,n], Gnx[:,n], Rnx[:,n]
 
-def recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
+def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
     i = Dn.shape[0]
     if i == 0:
         an = np.zeros(n)
         bn  = np.zeros(n)
     else:
         # get an^i and bn^i
-        (an, bn) = recursive_ab(m[:i],n,
+        (an, bn) = _recursive_ab(m[:i],n,
                                 Dn[:i-1,:], Gn[:i-1,:], Rn[:i-1,:],
                                 Dn1[:i-1,:],Gn1[:i-1,:],Rn1[:i-1,:])
         
@@ -106,7 +106,7 @@ def recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
 
     return an, bn
         
-def get_coated_coefficients(m,x, nmax):
+def _get_coated_coefficients(m,x, nmax):
     '''
     Compute the mie coefficients an and bn using recursion algorithm from
     Johnson, Appl. Opt. 35, 3286 (1996).
@@ -151,13 +151,13 @@ def get_coated_coefficients(m,x, nmax):
     nmx = int(np.round(max(nmax, max(abs(m*x))) + 16))
     
     # Get Dn(mi*x), Gn(mi*x), Rn(mi*x) 
-    Dn, Gn, Rn = log_RicattiBessel(mix,nmax,nmx)
+    Dn, Gn, Rn = _log_RicattiBessel(mix,nmax,nmx)
     
     # Get Dn(mi+1*x), Gn(mi+1*x), Rn(mi+1*x)
-    Dn1, Gn1, Rn1 = log_RicattiBessel(mi1x,nmax,nmx)
+    Dn1, Gn1, Rn1 = _log_RicattiBessel(mi1x,nmax,nmx)
     
     # Get an and bn
-    an, bn = recursive_ab(mi1, nmax, Dn, Gn, Rn, 
+    an, bn = _recursive_ab(mi1, nmax, Dn, Gn, Rn, 
                                      Dn1, Gn1, Rn1)
     
     # ---------------------------------------------------------------------
@@ -172,7 +172,7 @@ def get_coated_coefficients(m,x, nmax):
     
     return an, bn, phi, Dn1[-1,:], xi, Gn1[-1,:]
     
-def cross_section_at_lam(m,x,nmax = -1):
+def _cross_section_at_lam(m,x,nmax = -1):
     '''
     Compute cross sections and mie coeficients for a given lambda
     The absorption, scattering, extinction and asymmetry parameter are 
@@ -223,7 +223,7 @@ def cross_section_at_lam(m,x,nmax = -1):
     #------------------------------------------------------------------
     # Get mie coefficient and other parameters of interest
     #------------------------------------------------------------------
-    (an, bn, py, Dy, xy, Gy) = get_coated_coefficients(m,x,nmax)
+    (an, bn, py, Dy, xy, Gy) = _get_coated_coefficients(m,x,nmax)
 
     if imag(y) > 1E-8 :
         imy = 2*imag(y)
@@ -252,8 +252,8 @@ def cross_section_at_lam(m,x,nmax = -1):
     en = (2*n+1)*imag((+ np.abs(an*xy)**2*Gy                \
                        - np.abs(bn*xy)**2*conj(Gy)         \
                        )/y)
-    q = np.sum(en);
-    Qsca = real(1/real(y)*ft*q);
+    q = np.sum(en)
+    Qsca = real(1/real(y)*ft*q)
     
     #------------------------------------------------------------------
     # Asymmetry parameter
@@ -272,34 +272,136 @@ def cross_section_at_lam(m,x,nmax = -1):
     #------------------------------------------------------------------
     # Backward scattering (not valid for absorbing host media)
     #------------------------------------------------------------------
-    f = (2*n+1)*(-1)**n*(an - bn);
-    q = np.sum(f);
-    Qb = real(q*conj(q)/y**2);
+    f = (2*n+1)*(-1)**n*(an - bn)
+    q = np.sum(f)
+    Qb = real(q*conj(q)/y**2)
     
     #------------------------------------------------------------------
     # Forward scattering (not valid for absorbing host media)
     #------------------------------------------------------------------
-    f = (2*n+1)*(an + bn);
-    q = np.sum(f);
-    Qf = real(q*conj(q)/y**2);
+    f = (2*n+1)*(an + bn)
+    q = np.sum(f)
+    Qf = real(q*conj(q)/y**2)
     
     return Qext, Qsca, Asym, Qb, Qf, nmax, an, bn
+
+def _check_mie_inputs(lam,N_host,Np_shells,D):
+    '''
+    Ckeck and organize mie inputs before running any simulations
+    
+    Parameters
+    ----------
+    lam : ndarray or float
+        wavelengtgh (microns)
+        
+    N_host : ndarray or float
+        Complex refractive index of host. If ndarray, its size must be equal to
+        len(lam)
+        
+    Np_shells : float, 1darray or list
+        Complex refractive index of each shell layer. The number of elements
+        must be equal to len(D). Options are:
+            float:   solid sphere and constant refractive index
+            1darray: solid sphere and spectral refractive index (length must match that of lam)
+            list:    multilayered sphere (with both constant or spectral refractive indexes)
+        
+    D : float or list
+        Outter diameter of each shell's layer (microns). Options are:
+            float: solid sphere
+            list:  multilayered sphere
+
+    Returns
+    -------
+    lam : 1darray
+        wavelength range
+
+    Nh : 1darray
+        refractive index of host 
+
+    Np : ndarray
+        refractive index of shell layers
+
+    D  : 1darray
+        Diameters of shell layers
+
+    '''
+    
+    # convert input variables to list
+    if np.isscalar(lam) : lam = np.array([lam,])
+
+    # Verify D is float or list
+    #   1. solid sphere
+    if np.isscalar(D) : D = [D,]
+    #   2. multilayered sphere
+    else:
+        assert isinstance(D, list), 'diameter of shell layers must be on a list format'
+
+    # Verify Np_shells is float, 1darray or list    
+    #   1.solid sphere constant refractive index
+    if np.isscalar(Np_shells): 
+        Np_shells = [Np_shells,]
+    #   2.solid sphere spectral refractive index
+    elif isinstance(Np_shells, np.ndarray) and Np_shells.ndim ==1:
+        Np_shells = [Np_shells,]
+    #   3. multilayered sphere
+    else:
+        assert isinstance(Np_shells, list), 'refractive index of shell layers must be on a list format'
+    
+    # if multilayered sphere, check refractive index and D match in length
+    assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
+    
+    # convert list to ndarrays
+    D = np.array(D)
+
+    # analize Np_shells and rearrange to ndarray if float
+    Np = []
+    for Ni in Np_shells:
+        if np.isscalar(Ni):            # convert to ndarray if float
+            Ni = np.ones(len(lam))*Ni
+        else: 
+            assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
+        Np.append(Ni)
+    Np = np.array(Np).reshape(len(D),len(lam))
+
+    # sort layers from inner to outer shell
+    idx = np.argsort(D)
+    D = D[idx]
+    Np = Np[idx,:]
+
+    # analyze N_host and rearrange to ndarray if float
+    if np.isscalar(N_host):             # convert to ndarray if float
+        Nh = np.ones(len(lam))*N_host 
+    else: 
+        assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
+        Nh = np.copy(N_host)
+
+    return lam, Nh, Np, D 
 
 def scatter_efficiency(lam,N_host,Np_shells,D):
     
     '''
-    Compute mie scattering parameters for multi-shell spherical object
+    Compute mie scattering parameters for multi-shell spherical particle.
 
     Parameters
     ----------
-    lam : ndarray
+    lam : ndarray or float
         wavelengtgh (microns)
-    N_host : ndarray
-        Complex refractive index of host
-    Np_shells : tupple
-        Complex refractive index of each shell layer
-    D : tupple
-        Outter diameter of each shell's layer (microns)
+        
+    N_host : ndarray or float
+        Complex refractive index of host. If ndarray, its size must be equal to
+        len(lam)
+        
+    Np_shells : float, 1darray or list
+        Complex refractive index of each shell layer. The number of elements
+        must be equal to len(D). Options are:
+            float:   solid sphere and constant refractive index
+            1darray: solid sphere and spectral refractive index (length must match that of lam)
+            list:    multilayered sphere (with both constant or spectral refractive indexes)
+        
+    D : float or list
+        Outter diameter of each shell's layer (microns). Options are:
+            float: solid sphere
+            list:  multilayered sphere
 
     Returns
     -------
@@ -310,47 +412,22 @@ def scatter_efficiency(lam,N_host,Np_shells,D):
     gcos : ndarray
         Asymmetry parameter
     '''
-    # convert input variables to list
-    if np.isscalar(lam) : lam = np.array([lam,])
-    if np.isscalar(D) : D = [D,]
-    if np.isscalar(Np_shells): Np_shells = [Np_shells,]
-    if type(Np_shells) is np.ndarray: Np_shells = [Np_shells,]
-    
-    assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
-    
-    # convert list to ndarrays
-    D = np.array(D)
+    # first check inputs and arrange them in np arrays
+    lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
 
-    # analize Np_shells and rearrange to ndarray if float
-    Np = []
-    for Ni in Np_shells:
-        if np.isscalar(Ni):            # convert to ndarray if float
-            Ni = np.ones(len(lam))*Ni
-        else: 
-            assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
-        Np.append(Ni)
-    Np = np.array(Np).reshape(len(D),len(lam))
-
-    # analyze N_host and rearrange to ndarray if float
-    if np.isscalar(N_host):             # convert to ndarray if float
-        Nh = np.ones(len(lam))*N_host 
-    else: 
-        assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
-        Nh = np.copy(N_host)
-    
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
     kh = 2*pi*Nh/lam                # wavector in the host
     x = np.tensordot(kh,R,axes=0)   # size parameter
     
     m = m.transpose()
-    qext = np.zeros(len(lam))
-    qsca = np.zeros(len(lam))
-    gcos = np.zeros(len(lam))
+    qext = np.empty_like(lam)
+    qsca = np.empty_like(lam)
+    gcos = np.empty_like(lam)
     
     for iw in range(len(lam)) :
         qext[iw], qsca[iw], gcos[iw] = \
-            cross_section_at_lam(m[iw,:],x[iw,:])[:3]
+            _cross_section_at_lam(m[iw,:],x[iw,:])[:3]
         
     return qext, qsca, gcos
     
@@ -358,7 +435,7 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
     
     '''
     Compute mie scattering coefficients an and bn for multi-shell spherical 
-    object
+    object. Layeres must be sorted from inner to outter diameter
 
     Parameters
     ----------
@@ -366,16 +443,20 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
         wavelengtgh (microns)
         
     N_host : ndarray or float
-        Complex refractive index of host. If ndarray, the size must be equal to
+        Complex refractive index of host. If ndarray, its size must be equal to
         len(lam)
         
-    Np_shells : ndarray
+    Np_shells : float, 1darray or list
         Complex refractive index of each shell layer. The number of elements
-        must be equal to len(D). Each element should be, either, a float or a 
-        ndarray of size (n,), where n = len(lam)
+        must be equal to len(D). Options are:
+            float:   solid sphere and constant refractive index
+            1darray: solid sphere and spectral refractive index (length must match that of lam)
+            list:    multilayered sphere (with both constant or spectral refractive indexes)
         
-    D : ndarray
-        Outter diameter of each shell's layer (microns)
+    D : float or list
+        Outter diameter of each shell's layer (microns). Options are:
+            float: solid sphere
+            list:  multilayered sphere
 
     Returns
     -------
@@ -384,34 +465,8 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
     bn : ndarray
         Scattering coefficient N function
     '''
-    # convert input variables to list
-    if np.isscalar(lam) : lam = np.array([lam,])
-    if np.isscalar(D) : D = [D,]
-    if np.isscalar(Np_shells): Np_shells = [Np_shells,]
-    if type(Np_shells) is np.ndarray: Np_shells = [Np_shells,]
-    
-    assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
-    
-    # convert list to ndarrays
-    D = np.array(D)
-
-    # analize Np_shells and rearrange to ndarray if float
-    Np = []
-    for Ni in Np_shells:
-        if np.isscalar(Ni):            # convert to ndarray if float
-            Ni = np.ones(len(lam))*Ni
-        else: 
-            assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
-        Np.append(Ni)
-    Np = np.array(Np).reshape(len(D),len(lam))
-
-    # analyze N_host and rearrange to ndarray if float
-    if np.isscalar(N_host):             # convert to ndarray if float
-        Nh = np.ones(len(lam))*N_host 
-    else: 
-        assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
-        Nh = np.copy(N_host)
-    
+    # first check inputs and arrange them in np arrays
+    lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
     
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
@@ -419,10 +474,10 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
     x = np.tensordot(kh,R,axes=0)   # size parameter
 
     m = m.transpose()
-    an = np.zeros(len(lam))
-    bn = np.zeros(len(lam))
+    an = np.empty_like(lam)
+    bn = np.empyt_like(lam)
     
     for iw in range(len(lam)) :
-        an[iw], bn[iw] = cross_section_at_lam(m[iw,:],x[iw,:])[-2,-1]
+        an[iw], bn[iw] = _cross_section_at_lam(m[iw,:],x[iw,:])[-2,-1]
         
     return an, bn
