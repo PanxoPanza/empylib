@@ -106,7 +106,7 @@ def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
 
     return an, bn
         
-def _get_coated_coefficients(m,x, nmax):
+def _get_coated_coefficients(m,x, nmax=-1):
     '''
     Compute the mie coefficients an and bn using recursion algorithm from
     Johnson, Appl. Opt. 35, 3286 (1996).
@@ -136,8 +136,13 @@ def _get_coated_coefficients(m,x, nmax):
         Derivative of 2nd order Bessel-Ricatti function (evaluated at ka).
 
     '''
-    # size parameter for the outer diameter of the sphere
-    ka = x[-1]
+    assert len(x) == len(m)
+    
+    ka = x[-1] # size parameter of outer layer
+
+    # define nmax according to B.R Johnson (1996)
+    if nmax == -1 :
+        nmax = int(np.round(np.abs(ka) + 4*np.abs(ka)**(1/3) + 2))
     
     #----------------------------------------------------------------------
     #       Computing an and bn (main part of this code)
@@ -171,10 +176,10 @@ def _get_coated_coefficients(m,x, nmax):
     xi  = phi + 1j*chi                    # xi(n,ka)
     
     return an, bn, phi, Dn1[-1,:], xi, Gn1[-1,:]
-    
+
 def _cross_section_at_lam(m,x,nmax = -1):
     '''
-    Compute cross sections and mie coeficients for a given lambda
+    Compute mie scattering parameters for a given lambda
     The absorption, scattering, extinction and asymmetry parameter are 
     computed with the formulas for absorbing medium reported in 
     
@@ -206,20 +211,17 @@ def _cross_section_at_lam(m,x,nmax = -1):
     Qf : float
         Forward scatttering efficiency.
     nmax : int
-        number of mie coeffiencts.
-    an : 1D complex numpy array
-        mie coefficient.
-    bn : 1D complex numpy array
-        mie coefficient.
+        number of mie coefficients.
     '''
     assert len(x) == len(m)
     
     # determine nmax 
     y = x[-1] # size parameter of outer layer
+
     if nmax == -1 :
         # define nmax according to B.R Johnson (1996)
         nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
-    
+
     #------------------------------------------------------------------
     # Get mie coefficient and other parameters of interest
     #------------------------------------------------------------------
@@ -283,7 +285,7 @@ def _cross_section_at_lam(m,x,nmax = -1):
     q = np.sum(f)
     Qf = real(q*conj(q)/y**2)
     
-    return Qext, Qsca, Asym, Qb, Qf, nmax, an, bn
+    return Qext, Qsca, Asym, Qb, Qf
 
 def _check_mie_inputs(lam,N_host,Np_shells,D):
     '''
@@ -377,7 +379,7 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
 
     return lam, Nh, Np, D 
 
-def scatter_efficiency(lam,N_host,Np_shells,D):
+def scatter_efficiency(lam,N_host,Np_shells,D,nmax=-1):
     
     '''
     Compute mie scattering parameters for multi-shell spherical particle.
@@ -403,6 +405,9 @@ def scatter_efficiency(lam,N_host,Np_shells,D):
             float: solid sphere
             list:  multilayered sphere
 
+    nmax: int, optional  
+        Number of mie scattering coefficients. Default nmax = -1
+    
     Returns
     -------
     Qext : ndarray
@@ -419,19 +424,15 @@ def scatter_efficiency(lam,N_host,Np_shells,D):
     R = D/2                         # particle's inner radius
     kh = 2*pi*Nh/lam                # wavector in the host
     x = np.tensordot(kh,R,axes=0)   # size parameter
-    
     m = m.transpose()
-    qext = np.empty_like(lam)
-    qsca = np.empty_like(lam)
-    gcos = np.empty_like(lam)
     
-    for iw in range(len(lam)) :
-        qext[iw], qsca[iw], gcos[iw] = \
-            _cross_section_at_lam(m[iw,:],x[iw,:])[:3]
+    get_cross_section = np.vectorize(_cross_section_at_lam, 
+                                signature = '(n),(n),() -> (),(),(),(),()')
         
-    return qext, qsca, gcos
+    # outputs: qext, qsca, gcos
+    return get_cross_section(m, x, nmax)[:3] 
     
-def scatter_coeffients(lam,N_host,Np_shells,D):
+def scatter_coeffients(lam,N_host,Np_shells,D, nmax = -1):
     
     '''
     Compute mie scattering coefficients an and bn for multi-shell spherical 
@@ -458,6 +459,9 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
             float: solid sphere
             list:  multilayered sphere
 
+    nmax: int, optional  
+        Number of mie scattering coefficients. Default nmax = -1
+
     Returns
     -------
     an : ndarray
@@ -472,12 +476,16 @@ def scatter_coeffients(lam,N_host,Np_shells,D):
     R = D/2                         # particle's inner radius
     kh = 2*pi*Nh/lam                # wavector in the host
     x = np.tensordot(kh,R,axes=0)   # size parameter
-
     m = m.transpose()
-    an = np.empty_like(lam)
-    bn = np.empyt_like(lam)
-    
-    for iw in range(len(lam)) :
-        an[iw], bn[iw] = _cross_section_at_lam(m[iw,:],x[iw,:])[-2,-1]
-        
-    return an, bn
+
+    # determine nmax 
+    if nmax == -1 :
+        y = max(x[-1,:]) # largest size parameter of outer layer
+        # define nmax according to B.R Johnson (1996)
+        nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
+
+    get_coefficients = np.vectorize(_get_coated_coefficients,
+                signature = '(n), (n), () -> (m), (m), (m), (m), (m), (m)')
+
+    # outputs an and bn
+    return get_coefficients(m, x, nmax)[:2]

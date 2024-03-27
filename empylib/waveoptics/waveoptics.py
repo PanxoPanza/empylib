@@ -282,8 +282,8 @@ def incoh_multilayer(lam,theta,Nlayer,d=(),pol='TM', coh_length=0):
             assert len(Ni) == len(lam), 'refractive index must be either scalar or ndarray of size len(lam)'
         N.append(Ni)
     
-    Nmid = [N[0]];
-    dmid = [];
+    Nmid = [N[0]]
+    dmid = []
 
     TintP11 = 1
     TintP12 = 0
@@ -324,8 +324,8 @@ def incoh_multilayer(lam,theta,Nlayer,d=(),pol='TM', coh_length=0):
             TintP22 = Tint_21*P12 + Tint_22*P22
         
             th_0 = th_end   # update angle of incidence
-            Nmid = [N[m+1]];
-            dmid = [];
+            Nmid = [N[m+1]]
+            dmid = []
         else :
             Nmid.append(N[m+1])
             dmid.append(d[m])
@@ -474,6 +474,7 @@ def is_forward_angle(n, theta):
         assert (n * cos(theta.conjugate())).real < 100 * EPSILON, error_string
     return answer
 
+@np.vectorize
 def snell(n_1, n_2, th_1):
     """
     return angle theta in layer 2 with refractive index n_2, assuming
