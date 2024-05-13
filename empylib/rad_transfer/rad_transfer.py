@@ -220,11 +220,11 @@ def adm(lam,tfilm, fv_vol, Csca, Cabs, gcos, Nh, Nup=1.0, Ndw=1.0):
         Spectral specular reflectivity
 
     '''
-    kz_imag = 2*np.pi/lam*Nh.imag*1E3 # imaginary part of wavevector (mm^-1)
-    mu_s = fv_vol*Csca*1E3                # scattering coefficient (mm^-1) 
-    mu_a = fv_vol*Cabs + 2*kz_imag        # absorption coefficient (mm^-1)
-    g = gcos                             # asymmetry parameter
-    d = tfilm                            # film thickness (mm)
+    kz_imag = 2*np.pi/lam*Nh.imag*1E3   # imaginary part of wavevector (mm^-1)
+    mu_s = fv_vol*Csca*1E3              # scattering coefficient (mm^-1) 
+    mu_a = fv_vol*Cabs*1E3 + 2*kz_imag  # absorption coefficient (mm^-1)
+    g = gcos                            # asymmetry parameter
+    d = tfilm                           # film thickness (mm)
     
     if mu_s == 0 and mu_a == 0: a, b = 0, 0
     else:
