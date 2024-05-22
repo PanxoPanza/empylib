@@ -153,7 +153,6 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
 
     # get particle's concentration
     Vp = np.pi*D**3/6  # particle volume (um^3)
-    fv_vol = fv/Vp     # particle's concentration (1/um^3)
 
     # unpack refractive index of layers
     N_up, Nh, N_dw = Nlayers
@@ -167,10 +166,14 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     Cext = qext*Ac     # extinction cross section (um2)
     Cabs = Cext - Csca # absorption cross section (um2)
 
-    return adm(lam,tfilm, fv_vol, Csca, Cabs, gcos, Nh, N_up, N_dw)
+    # compute scattering and absorption coefficients
+    k_sca = fv/Vp*Csca
+    k_abs = fv/Vp*Cabs
+
+    return adm(lam,tfilm, k_sca, k_abs, gcos, Nh, N_up, N_dw)
 
 @np.vectorize
-def adm(lam,tfilm, fv_vol, Csca, Cabs, gcos, Nh, Nup=1.0, Ndw=1.0):
+def adm(lam,tfilm, k_sca, k_abs, gcos, Nh, Nup=1.0, Ndw=1.0):
     '''
     Reflectivitiy and transmissivity for a film with particles of arbitrary shape. This 
     function considers multiple scattering using adding-doubling method (adm) from 
@@ -184,14 +187,11 @@ def adm(lam,tfilm, fv_vol, Csca, Cabs, gcos, Nh, Nup=1.0, Ndw=1.0):
     tfilm : float
         Film Thickness in milimiters.
         
-    fv_vol : float
-        Particle's concentration (1/um^3).
-        
-    Csca : ndarray
-        Scattering cross section (um^2)
+    k_sca : ndarray
+        Scattering coefficient  = fv/Vp*Csca (um^-1)
 
-    Cabs : ndarray
-        Absorption cross section (um^2)
+    k_abs : ndarray
+        Absorption coefficient = fv/Vp*Cabs (um^-1)
         
     gcos : ndarray
         Assymmetry parameter
@@ -221,8 +221,8 @@ def adm(lam,tfilm, fv_vol, Csca, Cabs, gcos, Nh, Nup=1.0, Ndw=1.0):
 
     '''
     kz_imag = 2*np.pi/lam*Nh.imag*1E3   # imaginary part of wavevector (mm^-1)
-    mu_s = fv_vol*Csca*1E3              # scattering coefficient (mm^-1) 
-    mu_a = fv_vol*Cabs*1E3 + 2*kz_imag  # absorption coefficient (mm^-1)
+    mu_s = k_sca*1E3                    # scattering coefficient (mm^-1) 
+    mu_a = k_abs + 2*kz_imag            # absorption coefficient (mm^-1)
     g = gcos                            # asymmetry parameter
     d = tfilm                           # film thickness (mm)
     
@@ -236,7 +236,7 @@ def adm(lam,tfilm, fv_vol, Csca, Cabs, gcos, Nh, Nup=1.0, Ndw=1.0):
                    n=Nh.real, n_above=Nup.real, n_below=Ndw.real)
     
     # compute total components (only at normal incidence)
-    R_tot, T_tot, R_tot_all, R_tot_all = s.rt() # discard components at all incidenct angles 
+    R_tot, T_tot, R_tot_all, R_tot_all = s.rt() # discard components at all incidenct angles (_all)
     
     # compute specular (unscattered) componentes
     R_spec, T_spec = s.unscattered_rt()
