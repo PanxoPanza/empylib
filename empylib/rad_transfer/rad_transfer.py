@@ -222,7 +222,7 @@ def adm(lam,tfilm, k_sca, k_abs, gcos, Nh, Nup=1.0, Ndw=1.0):
     '''
     kz_imag = 2*np.pi/lam*Nh.imag*1E3   # imaginary part of wavevector (mm^-1)
     mu_s = k_sca*1E3                    # scattering coefficient (mm^-1) 
-    mu_a = k_abs + 2*kz_imag            # absorption coefficient (mm^-1)
+    mu_a = k_abs*1E3 + 2*kz_imag        # absorption coefficient (mm^-1)
     g = gcos                            # asymmetry parameter
     d = tfilm                           # film thickness (mm)
     
