@@ -337,6 +337,9 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
     #   2. multilayered sphere
     else:
         assert isinstance(D, list), 'diameter of shell layers must be on a list format'
+    
+    # convert list to ndarrays
+    D = np.array(D)
 
     # Verify Np_shells is float, 1darray or list    
     #   1.solid sphere constant refractive index
@@ -351,9 +354,6 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
     
     # if multilayered sphere, check refractive index and D match in length
     assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
-    
-    # convert list to ndarrays
-    D = np.array(D)
 
     # analize Np_shells and rearrange to ndarray if float
     Np = []

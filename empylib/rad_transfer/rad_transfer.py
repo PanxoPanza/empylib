@@ -149,10 +149,18 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     '''
     # here we only verify that length of Nlayers is 3
     assert isinstance(Nlayers, tuple), 'Nlayers must be on tuple format of dim = 3'
-    assert len(Nlayers) == 3,         'Number of layers must be 3'
+    assert len(Nlayers) == 3,          'Number of layers must be 3'
+
+    # Verify D is float or list
+    #   1. solid sphere
+    if np.isscalar(D) : D = [D,]
+    #   2. multilayered sphere
+    else:
+        assert isinstance(D, list), 'diameter of shell layers must be on a list format'
 
     # get particle's concentration
-    Vp = np.pi*D**3/6  # particle volume (um^3)
+    Vp = np.pi*D[-1]**3/6  # particle volume (um^3)
+    Ac = np.pi*D[-1]**2/4  # cross section area (um2)
 
     # unpack refractive index of layers
     N_up, Nh, N_dw = Nlayers
@@ -161,10 +169,9 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     qext, qsca, gcos = mie.scatter_efficiency(lam,Nh,Np,D)
     
     # convert results to cross sections
-    Ac = np.pi*D**2/4  # cross section area (um2)
-    Csca = qsca*Ac     # scattering cross section (um2)
-    Cext = qext*Ac     # extinction cross section (um2)
-    Cabs = Cext - Csca # absorption cross section (um2)
+    Csca = qsca*Ac         # scattering cross section (um2)
+    Cext = qext*Ac         # extinction cross section (um2)
+    Cabs = Cext - Csca     # absorption cross section (um2)
 
     # compute scattering and absorption coefficients
     k_sca = fv/Vp*Csca
