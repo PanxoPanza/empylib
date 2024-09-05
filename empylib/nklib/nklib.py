@@ -371,13 +371,13 @@ def emt_brugg(fv_1,nk_1,nk_2):
         complex refractive index of effective media
     '''
     # check simple cases first
-    if f1 == 0:     # no inclusions
+    if fv_1 == 0:     # no inclusions
         return nk_2
-    elif f1 == 1:   # no host
+    elif fv_1 == 1:   # no host
         return nk_1
 
     # prepare variables
-    f2 = 1 - f1
+    fv_2 = 1 - fv_1
     eps_1, eps_2 = nk_1**2, nk_2**2 # convert refractive index to dielectric constants
     
     # check if eps_1 or eps_2 are scalar and convert both to 1D ndarray
@@ -397,13 +397,13 @@ def emt_brugg(fv_1,nk_1,nk_2):
         assert len(eps_1) == len(eps_2), 'size of eps_1 and eps_2 must be equal'
 
     # compute effective dielectric constant ussing Bruggerman theory.
-    eps_m = 1/4.*((3*f1 - 1)*eps_1 + (3*f2 - 1)*eps_2                           \
-            - np.sqrt(((3*f1 - 1)*eps_1 + (3*f2 - 1)*eps_2)**2 + 8*eps_1*eps_2))
+    eps_m = 1/4.*((3*fv_1 - 1)*eps_1 + (3*fv_2 - 1)*eps_2                           \
+            - np.sqrt(((3*fv_1 - 1)*eps_1 + (3*fv_2 - 1)*eps_2)**2 + 8*eps_1*eps_2))
     
     for i in range(len(eps_m)):
         if eps_m[i].imag < 0  or (eps_m[i].imag < 1E-10 and eps_m[i].real < 0):
             eps_m[i] =  eps_m[i] + \
-                1/2*np.sqrt(((3*f1 - 1)*eps_1[i] + (3*f2 - 1)*eps_2[i])**2 \
+                1/2*np.sqrt(((3*fv_1 - 1)*eps_1[i] + (3*fv_2 - 1)*eps_2[i])**2 \
                 + 8*eps_1[i]*eps_2[i]) 
     
     # if eps_1 and eps_2 were scalar, return a single scalar value
