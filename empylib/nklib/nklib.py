@@ -350,24 +350,25 @@ def drude(epsinf,wp,gamma,lam):
     
     return np.sqrt(epsinf - wp**2/(w**2 + 1j*gamma*w))
 
-def emt_brugg(f1,nk_1,nk_2):
+def emt_brugg(fv_1,nk_1,nk_2):
     '''
     Effective permitivity based on Bruggersman theory
     
         Parameters
     ----------
+    fv_1: float   
+        filling fraction of material inclusions
+
     nk_1: ndarray
-        refractive index of inclussions
+        refractive index of inclusions
     
     nk_2: ndarray
         refractive index of host
-    
-    f1: float   
-        filling fraction of material eps1
 
     Returns
     -------
-    complex refractive index of effective media
+    nk_eff: ndarray
+        complex refractive index of effective media
     '''
     # check simple cases first
     if f1 == 0:     # no inclusions
