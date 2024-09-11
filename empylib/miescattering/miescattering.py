@@ -98,9 +98,9 @@ def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
         
         # get Un(mi*kri), Vn(mi, kri)
         Un = (Rn[i-1,:]*Dn[i-1,:] - an*Gn[i-1,:])/ \
-                (Rn[i-1,:] - an + 1E-30)
+                (Rn[i-1,:] - an + 1E-10)
         Vn = (Rn[i-1,:]*Dn[i-1,:] - bn*Gn[i-1,:])/ \
-                (Rn[i-1,:] - bn + 1E-30)
+                (Rn[i-1,:] - bn + 1E-10)
         
         # get an^(i+1), bn^(i+1) by recursion formula
         an = Rn1[i-1,:]*(m[i]/m[i-1]*Un - Dn1[i-1,:])/ \
