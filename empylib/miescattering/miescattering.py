@@ -42,21 +42,24 @@ def _log_RicattiBessel(x,nmax,nmx):
     
     # Get Dn(x) by downwards recurrence
     Dnx = np.zeros((len(x),nmx),dtype=np.complex_)
-    for i in reversed(range(nmx)):
+    for i in reversed(range(1, nmx)):
         # define D_(i+1) (x)
-        if i == nmx-1 : Dip1 = np.zeros(len(x))
-        else :          Dip1 = Dnx[:,i+1]
+        # if i == nmx-1 : Dip1 = np.zeros(len(x))
+        # else :          Dip1 = Dnx[:,i+1]
         
-        Dnx[:,i] = (i + 2)/x - 1/(Dip1 + (i + 2)/x)
+        Dnx[:,i-1] = (i+1)/x - 1/(Dnx[:,i] + (i+1)/x)
         
     # Get Gn(x) by upwards recurrence
     Gnx = np.zeros((len(x),nmx),dtype=np.complex_)
-    for i in range(nmx):
+    G0x = 1j*np.ones_like(x)
+    i = 0
+    Gnx[:,i] = 1/((i+1)/x - G0x) - (i+1)/x
+    for i in range(1, nmx):
         # define G_(i-1) (x)
-        if i == 0 : Gim1x = 1j*np.ones(len(x))
-        else : Gim1x = Gnx[:,i-1] 
+        # if i == 0 : Gim1x = 1j*np.ones(len(x))
+        # else : Gim1x = Gnx[:,i-1] 
         
-        Gnx[:,i] = 1/((i + 1)/x - Gim1x) - (i + 1)/x
+        Gnx[:,i] = 1/((i+1)/x - Gnx[:,i-1]) - (i+1)/x
     
     # Get Rn(x) by upwards recurrence
     Rnx = np.zeros((len(x),len(n)),dtype=np.complex_) 
@@ -86,7 +89,7 @@ def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
     i = Dn.shape[0]
     if i == 0:
         an = np.zeros(n)
-        bn  = np.zeros(n)
+        bn = np.zeros(n)
     else:
         # get an^i and bn^i
         (an, bn) = _recursive_ab(m[:i],n,
@@ -94,8 +97,10 @@ def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
                                 Dn1[:i-1,:],Gn1[:i-1,:],Rn1[:i-1,:])
         
         # get Un(mi*kri), Vn(mi, kri)
-        Un = (Rn[i-1,:]*Dn[i-1,:] - an*Gn[i-1,:])/(Rn[i-1,:] - an)
-        Vn = (Rn[i-1,:]*Dn[i-1,:] - bn*Gn[i-1,:])/(Rn[i-1,:] - bn)
+        Un = (Rn[i-1,:]*Dn[i-1,:] - an*Gn[i-1,:])/ \
+                (Rn[i-1,:] - an + 1E-30)
+        Vn = (Rn[i-1,:]*Dn[i-1,:] - bn*Gn[i-1,:])/ \
+                (Rn[i-1,:] - bn + 1E-30)
         
         # get an^(i+1), bn^(i+1) by recursion formula
         an = Rn1[i-1,:]*(m[i]/m[i-1]*Un - Dn1[i-1,:])/ \

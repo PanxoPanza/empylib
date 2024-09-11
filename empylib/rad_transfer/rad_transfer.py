@@ -165,13 +165,17 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     # unpack refractive index of layers
     N_up, Nh, N_dw = Nlayers
 
-    # get scattering efficiency and asymmetry parameter
+    # get scattering and extinction efficiencies and asymmetry parameter
     qext, qsca, gcos = mie.scatter_efficiency(lam,Nh,Np,D)
+
+    # get absorption efficiency
+    qabs = qext - qsca
+    qabs[qabs < 0] = 0 # if absorption is negative, make it zero
     
     # convert results to cross sections
-    Csca = qsca*Ac         # scattering cross section (um2)
-    Cext = qext*Ac         # extinction cross section (um2)
-    Cabs = Cext - Csca     # absorption cross section (um2)
+    Csca = qsca*Ac     # scattering cross section (um2)
+    Cext = qext*Ac     # extinction cross section (um2)
+    Cabs = qabs*Ac     # absorption cross section (um2)
 
     # compute scattering and absorption coefficients
     k_sca = fv/Vp*Csca
