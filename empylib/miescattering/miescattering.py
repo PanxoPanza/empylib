@@ -349,7 +349,7 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
     # Verify Np_shells is float, 1darray or list    
     #   1.solid sphere constant refractive index
     if np.isscalar(Np_shells): 
-        Np_shells = [Np_shells,]
+        Np_shells = [Np_shells.astype,]
     #   2.solid sphere spectral refractive index
     elif isinstance(Np_shells, np.ndarray) and Np_shells.ndim ==1:
         Np_shells = [Np_shells,]
@@ -367,7 +367,7 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
             Ni = np.ones(len(lam))*Ni
         else: 
             assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
-        Np.append(Ni)
+        Np.append(Ni.astype(complex))
     Np = np.array(Np).reshape(len(D),len(lam))
 
     # sort layers from inner to outer shell
@@ -377,10 +377,10 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
 
     # analyze N_host and rearrange to ndarray if float
     if np.isscalar(N_host):             # convert to ndarray if float
-        Nh = np.ones(len(lam))*N_host 
+        Nh = np.ones(len(lam))*N_host.astype(complex) 
     else: 
         assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
-        Nh = np.copy(N_host)
+        Nh = np.copy(N_host.astype(complex))
 
     return lam, Nh, Np, D 
 
@@ -425,9 +425,9 @@ def scatter_efficiency(lam,N_host,Np_shells,D,nmax=-1):
     # first check inputs and arrange them in np arrays
     lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
 
-    m = Np/Nh                       # sphere layers
+    m = Np/Nh.real                  # sphere layers
     R = D/2                         # particle's inner radius
-    kh = 2*pi*Nh/lam                # wavector in the host
+    kh = 2*pi*Nh.real/lam           # wavector in the host
     x = np.tensordot(kh,R,axes=0)   # size parameter
     m = m.transpose()
     
