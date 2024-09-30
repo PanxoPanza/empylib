@@ -7,13 +7,14 @@ Created on Sun Nov  7 17:25:53 2021
 @author: PanxoPanza
 """
 import os
+from pathlib import Path
 import platform
 import numpy as np 
+import pandas as pd
 from scipy.integrate import quad
 from warnings import warn
 from .. import convert_units
 from typing import Callable # used to check callable variables
-import pandas as pd
 
 def _ndarray_check(x):
     '''
@@ -23,7 +24,7 @@ def _ndarray_check(x):
         return np.array([x]), True
     return x, False
 
-def get_nkfile(lam, MaterialName):
+def get_nkfile(lam, MaterialName, get_from_local_path = False):
     '''
     Reads a tabulated *.nk file and returns an interpolated
     1D numpy array with the complex refractive index
@@ -46,39 +47,46 @@ def get_nkfile(lam, MaterialName):
     lam, lam_isfloat = _ndarray_check(lam)   
     
     # retrieve local path
-    dir_separator = '\\' # default value
-    if platform.system() == "Linux":    # linux
-        dir_separator= '/'
+    if get_from_local_path:
+        # if function is called locally
+        caller_directory = Path(__file__).parent
+    else :
+        # if function is called from working directory (where the function is called)
+        caller_directory = Path.cwd()
 
-    elif platform.system() == 'Darwin': # OS X
-        dir_separator='/'
-
-    elif platform.system() == "Windows":  # Windows...
-        dir_separator='\\'
-
-    dir_path = os.path.dirname(__file__) + dir_separator
-    filename = dir_path + MaterialName + '.nk'
+    # Construct the full path of the file
+    filename = MaterialName + '.nk'
+    file_path = caller_directory / filename   
    
     # check if file exist
-    assert os.path.isfile(filename), 'File not found'
+    assert file_path.exists(), 'File not found'
     
-    data = np.genfromtxt(filename)
-    assert data.shape[1] <= 3, 'wrong file format'
+    # read data as dataframe
+    nk_df = pd.read_csv(file_path, \
+                        comment = '#', \
+                        delim_whitespace = True, \
+                        header = None, \
+                        index_col = 0)
+    
+    # check if has n and k data
+    assert nk_df.shape[1] == 2, 'wrong file format'
 
-    mat_data = {'wavelengths': data[:,0], 'index': data[:,1] + 1j*data[:,2]*(data[:,2] > 0)}
+    # label columns and index
+    nk_df.columns = ['n', 'k']
+    nk_df.index.name = 'lambda'
 
     # create complex refractive index using interpolation form nkfile
-    N = np.interp(lam, mat_data['wavelengths'],mat_data['index'])
+    N = np.interp(lam, nk_df.index, nk_df['n'] + 1j*nk_df['k'])
     
     # warning if extrapolated values
-    if lam[ 0] < data[ 0,0] :
-        warn('Extrapolating from %.3f to %.3f' % (lam[0], data[0,0]))
+    if lam[ 0] < nk_df.index[0] :
+        warn('Extrapolating from %.3f to %.3f' % (lam[0], nk_df.index[0]))
         
-    if lam[-1] > data[-1,0] :
-        warn('Extrapolating from %.3f to %.3f' % (data[-1,0], lam[-1]))
+    if lam[-1] > nk_df.index[-1] :
+        warn('Extrapolating from %.3f to %.3f' % (nk_df.index[-1], lam[-1]))
     
     # if lam was float (orginaly), convert N to a complex value
-    return complex(N[0]) if lam_isfloat else N, mat_data
+    return complex(N[0]) if lam_isfloat else N, nk_df
 
 def get_ri_info(lam,shelf,book,page):
     '''
@@ -476,42 +484,45 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
 '''
 
 #------------------------------------------------------------------------------
-#                                   Oxides
+#                                   Inorganic
 # refractive index of SiO2
-SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013')[0]
+SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013', get_from_local_path = True)[0]
+
+# refractive index of CaCO3
+CaCO3 = lambda lam: get_nkfile(lam, 'CaCO3_Palik', get_from_local_path = True)[0]
 
 # refractive index of TiO2
-TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
+TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke', get_from_local_path = True)[0]
 
 # refractive index of ZnO
-ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry')[0]
+ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry', get_from_local_path = True)[0]
 
 # refractive index of MgO
-MgO = lambda lam: get_nkfile(lam,'MgO_Synowicki2005')[0]
+MgO = lambda lam: get_nkfile(lam,'MgO_Synowicki2005', get_from_local_path = True)[0]
 
 # refractive index of Alumina (AL2O3)
-Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o')[0]
+Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o', get_from_local_path = True)[0]
 
 # refractive index of ZnS
-ZnS = lambda lam: get_ri_info(lam,'main','ZnS','Querry')[0]
+ZnS = lambda lam: get_ri_info(lam,'main','ZnS','Querry', get_from_local_path = True)[0]
 
 # refractive index of amorphous GeSbTe (GST)
-GSTa = lambda lam: get_nkfile(lam, 'GSTa_Du2016')[0]
+GSTa = lambda lam: get_nkfile(lam, 'GSTa_Du2016', get_from_local_path = True)[0]
 
 # refractive index of crystaline GeSbTe (GST)
-GSTc = lambda lam: get_nkfile(lam, 'GSTc_Du2016')[0]
+GSTc = lambda lam: get_nkfile(lam, 'GSTc_Du2016', get_from_local_path = True)[0]
 
 # refractive index of crystaline GeSbTe (GST)
-GSTc = lambda lam: get_nkfile(lam, 'GSTc_Du2016')[0]
+GSTc = lambda lam: get_nkfile(lam, 'GSTc_Du2016', get_from_local_path = True)[0]
 
 
 # refractive index of Monoclinic(cold) Vanadium Dioxide (VO2M)
 # sputtered on SiO2 by default (film2)
-VO2M = lambda lam, film = 2: get_nkfile(lam, 'VO2M_Wan2019(film%i)' % film)[0]
+VO2M = lambda lam, film = 2: get_nkfile(lam, 'VO2M_Wan2019(film%i)' % film, get_from_local_path = True)[0]
 
 # refractive index of Rutile(hot) Vanadium Dioxide (VO2R)
 # sputtered on SiO2 by default (film2)
-VO2R = lambda lam, film = 2: get_nkfile(lam, 'VO2R_Wan2019(film%i)' % film)[0]
+VO2R = lambda lam, film = 2: get_nkfile(lam, 'VO2R_Wan2019(film%i)' % film, get_from_local_path = True)[0]
 
 def VO2(lam,T, film=2 , Tphc = 73, WT = 3.1):
     '''
@@ -553,8 +564,6 @@ def VO2(lam,T, film=2 , Tphc = 73, WT = 3.1):
     
     return np.sqrt(eps)
 
-#------------------------------------------------------------------------------
-#                                   Inorganics
 # refractive index of Silicon
 Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
 

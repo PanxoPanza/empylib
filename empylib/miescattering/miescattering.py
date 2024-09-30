@@ -184,6 +184,7 @@ def _get_coated_coefficients(m,x, nmax=-1):
 
 def _cross_section_at_lam(m,x,nmax = -1):
     '''
+    NEED TO CHECK FLUCTUATION FOR LARGE PARTICLES (F. RAMIREZ 2024)
     Compute mie scattering parameters for a given lambda
     The absorption, scattering, extinction and asymmetry parameter are 
     computed with the formulas for absorbing medium reported in 
