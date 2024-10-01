@@ -565,37 +565,37 @@ def VO2(lam,T, film=2 , Tphc = 73, WT = 3.1):
     return np.sqrt(eps)
 
 # refractive index of Silicon
-Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017')[0]
+Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017', get_from_local_path = True)[0]
 
 #------------------------------------------------------------------------------
 #                                   Metals
 # refractive index of Gold
-gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap')[0]
+gold = lambda lam: get_nkfile(lam, 'au_Olmon2012_evap', get_from_local_path = True)[0]
 
 # refractive index of Silver
-silver = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017')[0]
+silver = lambda lam: get_nkfile(lam, 'ag_Ciesielski2017', get_from_local_path = True)[0]
 
 # refractive index of Copper
-Cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015')[0]
+Cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015', get_from_local_path = True)[0]
 
 # refractive index of Aluminium
-Al   = lambda lam: get_nkfile(lam, 'al_Rakic1995')[0]
+Al   = lambda lam: get_nkfile(lam, 'al_Rakic1995', get_from_local_path = True)[0]
 
 #------------------------------------------------------------------------------
 #                                   Polymers
 # refractive index of HDPE
-HDPE  = lambda lam: get_nkfile(lam, 'HDPE_Palik')[0]
+HDPE  = lambda lam: get_nkfile(lam, 'HDPE_Palik', get_from_local_path = True)[0]
 
 # refractive index of HDPE
-PDMS  = lambda lam: get_nkfile(lam, 'PDMS_Zhang2020_Querry1987')[0]
+PDMS  = lambda lam: get_nkfile(lam, 'PDMS_Zhang2020_Querry1987', get_from_local_path = True)[0]
 
 # refractive index of PMMA
 PMMA = lambda lam: get_ri_info(lam,'organic','(C5H8O2)n - poly(methyl methacrylate)','Zhang-Tomson')[0]
 
 # refractive index of PVDF-HFP
-PVDF  = lambda lam: get_nkfile(lam, 'PVDF-HFP_Mandal2018')[0]
+PVDF  = lambda lam: get_nkfile(lam, 'PVDF-HFP_Mandal2018', get_from_local_path = True)[0]
 
 #------------------------------------------------------------------------------
 #                                   Others
 # refractive index of water
-H2O  = lambda lam: get_nkfile(lam, 'h2o_Hale1973')[0]
+H2O  = lambda lam: get_nkfile(lam, 'h2o_Hale1973', get_from_local_path = True)[0]
