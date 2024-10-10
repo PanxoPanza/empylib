@@ -25,7 +25,6 @@ setup(
     author=get_init_val('author'),
     url=get_init_val('url'),
     package_data={'': ['LICENSE', 'NOTICE', '*.nk', '*.txt']},
-    include_package_data=True,
     license=get_init_val('license'),
     keywords='electromagnetism',
     install_requires=['numpy',

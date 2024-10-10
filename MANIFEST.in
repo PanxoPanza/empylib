@@ -1,1 +1,2 @@
-global -include *.txt *.py
+recursive-include empylib/nk_files *.nk
+recursive-include empylib/spectra_data *.txt
