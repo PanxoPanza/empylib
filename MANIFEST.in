@@ -1,2 +1,1 @@
-recursive-include empylib/nk_files *.nk
-recursive-include empylib/spectra_data *.txt
+global -include *.txt *.py
