@@ -57,7 +57,7 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     # read data as dataframe
     nk_df = pd.read_csv(file_path, \
                         comment = '#', \
-                        sep='\s+'), \
+                        sep='\s+', \
                         header = None, \
                         index_col = 0)
     
@@ -486,19 +486,19 @@ SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013', get_from_local_p
 CaCO3 = lambda lam: get_nkfile(lam, 'CaCO3_Palik', get_from_local_path = True)[0]
 
 # refractive index of TiO2
-TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke', get_from_local_path = True)[0]
+TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
 
 # refractive index of ZnO
-ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry', get_from_local_path = True)[0]
+ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry')[0]
 
 # refractive index of MgO
 MgO = lambda lam: get_nkfile(lam,'MgO_Palik', get_from_local_path = True)[0]
 
 # refractive index of Alumina (AL2O3)
-Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o', get_from_local_path = True)[0]
+Al2O3 = lambda lam: get_ri_info(lam,'main','Al2O3','Querry-o')[0]
 
 # refractive index of ZnS
-ZnS = lambda lam: get_ri_info(lam,'main','ZnS','Querry', get_from_local_path = True)[0]
+ZnS = lambda lam: get_ri_info(lam,'main','ZnS','Querry')[0]
 
 # refractive index of amorphous GeSbTe (GST)
 GSTa = lambda lam: get_nkfile(lam, 'GSTa_Du2016', get_from_local_path = True)[0]
