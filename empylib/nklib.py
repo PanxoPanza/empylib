@@ -42,24 +42,20 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     # retrieve local path
     if get_from_local_path:
         # if function is called locally
-        caller_directory = Path(__file__).parent
+        caller_directory = Path(__file__).parent / 'nk_files'
     else :
         # if function is called from working directory (where the function is called)
         caller_directory = Path.cwd()
 
     # Construct the full path of the file
     filename = MaterialName + '.nk'
-    file_path = caller_directory / 'nk_files' / filename   
+    file_path = caller_directory / filename   
    
     # check if file exist
     assert file_path.exists(), 'File not found'
     
     # read data as dataframe
-    nk_df = pd.read_csv(file_path, \
-                        comment = '#', \
-                        sep='\s+', \
-                        header = None, \
-                        index_col = 0)
+    nk_df = pd.read_csv(file_path, comment='#', sep='\s+', header=None, index_col=0)
     
     # check if has n and k data
     assert nk_df.shape[1] == 2, 'wrong file format'

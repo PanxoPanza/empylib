@@ -43,13 +43,13 @@ def read_spectrafile(lam, MaterialName, get_from_local_path = False):
     # retrieve local path
     if get_from_local_path:
         # if function is called locally
-        caller_directory = Path(__file__).parent
+        caller_directory = Path(__file__).parent / 'spectra_data'
     else :
         # if function is called from working directory (where the function is called)
         caller_directory = Path.cwd()
 
     # Construct the full path of the file
-    file_path = caller_directory / 'spectra_data' / MaterialName   
+    file_path = caller_directory / MaterialName   
    
     # check if file exist
     assert file_path.exists(), 'File not found'
