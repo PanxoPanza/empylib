@@ -9,13 +9,13 @@ Created on Sun Nov  7 17:25:53 2021
 import os
 import sys
 
-empylib_folder = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.insert(0,empylib_folder)
+# empylib_folder = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+# sys.path.insert(0,empylib_folder)
 
 import numpy as np
 from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
-import miescattering as mie
-import waveoptics as wv
+from . import miescattering as mie
+from . import waveoptics as wv
 import iadpython as iad
 
 def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):

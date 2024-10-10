@@ -38,7 +38,7 @@ class ColorSystem:
         dir_separator='\\'
 
     # The CIE color matching function for 380 - 780 nm in 5 nm intervals
-    file_name = 'cie-cmf.txt'
+    file_name = 'spectra_data' + dir_separator + 'cie-cmf.txt'
     dir_path = os.path.dirname(__file__) + dir_separator
     lam_cmf = np.loadtxt(dir_path+file_name, usecols=(0)) # wavelength spectrum
     cmf = np.loadtxt(dir_path+file_name, usecols=(1,2,3)) # x, y, z  CIE colour matching functions

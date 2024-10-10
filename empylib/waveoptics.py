@@ -6,12 +6,8 @@ Created on Sun Nov  7 17:25:53 2021
 
 @author: PanxoPanza
 """
-import numpy as np
-from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
-from numpy.lib.scimath import arcsin
 
-import sys
-EPSILON = sys.float_info.epsilon # typical floating-point calculation error
+import numpy as np
 
 def interface(theta,N1,N2, pol='TM'):
     '''
@@ -50,6 +46,9 @@ def interface(theta,N1,N2, pol='TM'):
         Transmission coeficient
     
     '''
+    from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+    from numpy.lib.scimath import arcsin
+    
     nn1, tt = meshgrid(N1,theta)
     nn2     = meshgrid(N2,theta)[0]
     
@@ -140,6 +139,8 @@ def multilayer(lam,tt,N,d=(), pol='TM'):
         Transmission coeficient
 
     '''
+    from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+    from numpy.lib.scimath import arcsin
     
     # configure input data and assert size compatibility
     lam, d = assert_multilayer_input(lam,d,N)
@@ -263,7 +264,9 @@ def incoh_multilayer(lam,theta,Nlayer,d=(),pol='TM', coh_length=0):
         Transmissivity
 
     '''
-    
+    from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+    from numpy.lib.scimath import arcsin
+
     # configure input data and assert size compatibility
     lam, d = assert_multilayer_input(lam,d,Nlayer)
     
@@ -384,7 +387,9 @@ def assert_multilayer_input(lam,d,N):
         Thickness of each layer in microns
 
     '''
-    
+    from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+    from numpy.lib.scimath import arcsin
+        
     if np.isscalar(lam) :  lam = np.array([lam]) # convert lam to a ndarray
     if np.isscalar(d):  d = (d,)              # convert d to an iterable tuple
     
@@ -397,6 +402,10 @@ def assert_multilayer_input(lam,d,N):
     return lam, d
 
 def TMMcoh(lam, th_0, Nmid, dmid, pol):
+    import numpy as np
+    from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+    from numpy.lib.scimath import arcsin
+
     # store layer thickness
     dfw = dmid.copy()
     dbw = dmid.copy()
@@ -443,6 +452,12 @@ def is_forward_angle(n, theta):
     See https://arxiv.org/abs/1603.02720 appendix D. If theta is the forward
     angle, then (pi-theta) is the backward angle and vice-versa.
     """
+    from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
+    from numpy.lib.scimath import arcsin
+    import sys
+    EPSILON = sys.float_info.epsilon # typical floating-point calculation error
+
+
     assert n.real * n.imag >= 0, ("For materials with gain, it's ambiguous which "
                                   "beam is incoming vs outgoing. See "
                                   "https://arxiv.org/abs/1603.02720 Appendix C.\n"

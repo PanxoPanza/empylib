@@ -7,22 +7,12 @@ Created on Sun Nov  7 17:25:53 2021
 @author: PanxoPanza
 """
 import os
-from pathlib import Path
 import platform
 import numpy as np 
 import pandas as pd
 from scipy.integrate import quad
 from warnings import warn
-from .. import convert_units
 from typing import Callable # used to check callable variables
-
-def _ndarray_check(x):
-    '''
-    check if x is not ndarray. If so, convert x to a 1d ndarray
-    '''
-    if not isinstance(x, np.ndarray):
-        return np.array([x]), True
-    return x, False
 
 def get_nkfile(lam, MaterialName, get_from_local_path = False):
     '''
@@ -43,6 +33,9 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     data: ndarray
         Original tabulated data from file
     '''
+    from .utils import _ndarray_check
+    from pathlib import Path
+
     # check if lam is not ndarray
     lam, lam_isfloat = _ndarray_check(lam)   
     
@@ -56,7 +49,7 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
 
     # Construct the full path of the file
     filename = MaterialName + '.nk'
-    file_path = caller_directory / filename   
+    file_path = caller_directory / 'nk_files' / filename   
    
     # check if file exist
     assert file_path.exists(), 'File not found'
@@ -187,6 +180,7 @@ def eps_gaussian(A,Br,E0,lam):
     eps : ndarray (complex)
         Complex dielectric constant
     '''
+    from .utils import convert_units
 
     #  Gauss model as function of E (in eV)
     f = 0.5/np.sqrt(np.log(2)) # scaling constant
@@ -228,7 +222,7 @@ def eps_tauc_lorentz(A,C,E0,Eg,lam):
     eps : ndarray (complex)
         Complex dielectric constant
     '''
-    # este es un comentario
+    from .utils import convert_units
     
     #  Tauc-Lorentz model as function of E (in eV)
     eps_TL = lambda E: 1/E*A*E0*C*(E - Eg)**2/ \
@@ -324,6 +318,7 @@ def lorentz(epsinf,wp,wn,gamma,lam):
     complex refractive index
 
     '''
+    from .utils import convert_units
     w = convert_units(lam,'um','eV')  # conver from um to eV 
     
     return np.sqrt(epsinf + wp**2/(wn**2 - w**2 - 1j*gamma*w))
@@ -448,6 +443,8 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
     eps_real: ndarray or float
               real part of dielectric constant
     '''
+    from .utils import convert_units
+
     lam, lam_isfloat = _ndarray_check(lam)
     cshift = complex(0, cshift)
     w_i = convert_units(lam,'um', 'eV')

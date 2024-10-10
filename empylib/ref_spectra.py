@@ -15,7 +15,7 @@ import platform
 import numpy as np 
 import empylib as em
 
-def read_spectrafile(lam, MaterialName):
+def read_spectrafile(lam, MaterialName, get_from_local_path = False):
     '''
     Reads a textfile and returns an interpolated
     1D numpy array with the complex refractive index
@@ -34,29 +34,32 @@ def read_spectrafile(lam, MaterialName):
         1.Interpolated complex refractive index
         2.Tabulated data used for interpolation (optional)
     '''
-    # retrieve local path
-    dir_separator = '\\' # default value
-    if platform.system() == "Linux":    # linux
-        dir_separator= '/'
+    from .utils import _ndarray_check
+    from pathlib import Path
 
-    elif platform.system() == 'Darwin': # OS X
-        dir_separator='/'
-
-    elif platform.system() == "Windows":  # Windows...
-        dir_separator='\\'
-
-    dir_path = os.path.dirname(__file__) + dir_separator
-    filename = dir_path + MaterialName
+    # check if lam is not ndarray
+    lam, lam_isfloat = _ndarray_check(lam)   
     
+    # retrieve local path
+    if get_from_local_path:
+        # if function is called locally
+        caller_directory = Path(__file__).parent
+    else :
+        # if function is called from working directory (where the function is called)
+        caller_directory = Path.cwd()
+
+    # Construct the full path of the file
+    file_path = caller_directory / 'spectra_data' / MaterialName   
+   
     # check if file exist
-    assert os.path.isfile(filename), 'File not found'
+    assert file_path.exists(), 'File not found'
     
     # check number of columns in file
-    data = np.genfromtxt(filename)
+    data = np.genfromtxt(file_path)
     assert data.shape[1] <= 2, 'wrong file format'
     
     # run interpolation based on lam
-    if np.isscalar(lam):
+    if lam_isfloat:
         len_lam = 1
     else:
         len_lam = len(lam)
@@ -87,9 +90,9 @@ def AM15(lam,spectra_type='global'):
     lam = lam*1E3 # change units to nm
     
     if spectra_type == 'global':
-        Isun = read_spectrafile(lam,'AM15_Global.txt')[0]
+        Isun = read_spectrafile(lam,'AM15_Global.txt', True)[0]
     elif spectra_type == 'direct':
-        Isun = read_spectrafile(lam,'AM15_Direct.txt')[0]
+        Isun = read_spectrafile(lam,'AM15_Direct.txt', True)[0]
     
     # keep only positive values
     if not np.isscalar(Isun):
@@ -114,7 +117,7 @@ def T_atmosphere(lam):
 
     '''
     # interpolate values according to lam spectra
-    T_atm =  read_spectrafile(lam,'T_atmosphere.txt')[0]
+    T_atm =  read_spectrafile(lam,'T_atmosphere.txt', True)[0]
     
     # keep only positive values
     if not np.isscalar(T_atm):
@@ -189,7 +192,7 @@ def yCIE_lum(lam):
     # interpolate values according to lam spectra
     lam = lam*1E3 # change units to nm
     
-    yCIE = read_spectrafile(lam,'CIE_lum.txt')[0]
+    yCIE = read_spectrafile(lam,'CIE_lum.txt', True)[0]
     
     # keep only positive values
     if not np.isscalar(yCIE):
