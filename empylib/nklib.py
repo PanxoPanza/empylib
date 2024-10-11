@@ -46,7 +46,7 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     else :
         # if function is called from working directory (where the function is called)
         caller_directory = Path.cwd()
-
+    
     # Construct the full path of the file
     filename = MaterialName + '.nk'
     file_path = caller_directory / filename   
@@ -369,6 +369,8 @@ def emt_brugg(fv_1,nk_1,nk_2):
     nk_eff: ndarray
         complex refractive index of effective media
     '''
+    from .utils import _ndarray_check
+    
     # check simple cases first
     if fv_1 == 0:     # no inclusions
         return nk_2
@@ -437,6 +439,7 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
               real part of dielectric constant
     '''
     from .utils import convert_units
+    from .utils import _ndarray_check
 
     lam, lam_isfloat = _ndarray_check(lam)
     cshift = complex(0, cshift)
