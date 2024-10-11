@@ -13,6 +13,8 @@ import pandas as pd
 from scipy.integrate import quad
 from warnings import warn
 from typing import Callable # used to check callable variables
+from .utils import _ndarray_check
+from pathlib import Path
 
 def get_nkfile(lam, MaterialName, get_from_local_path = False):
     '''
@@ -33,8 +35,6 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     data: ndarray
         Original tabulated data from file
     '''
-    from .utils import _ndarray_check
-    from pathlib import Path
 
     # check if lam is not ndarray
     lam, lam_isfloat = _ndarray_check(lam)   
@@ -66,6 +66,10 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
 
     # create complex refractive index using interpolation form nkfile
     N = np.interp(lam, nk_df.index, nk_df['n'] + 1j*nk_df['k'])
+
+    # if N.real or N.imag < 0, make it = 0
+    N[N.real<0] = 0                + 1j*N[N.real<0].imag # real part = 0 (keep imag part)
+    N[N.imag<0] = N[N.imag<0].real + 1j*0                # imag part = 0 (keep real part)
     
     # warning if extrapolated values
     if lam[ 0] < nk_df.index[0] :
@@ -76,6 +80,7 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     
     # if lam was float (orginaly), convert N to a complex value
     return complex(N[0]) if lam_isfloat else N, nk_df
+    # return N(lam), nk_df
 
 def get_ri_info(lam,shelf,book,page):
     '''
@@ -218,7 +223,6 @@ def eps_tauc_lorentz(A,C,E0,Eg,lam):
     eps : ndarray (complex)
         Complex dielectric constant
     '''
-    from .utils import convert_units
     
     #  Tauc-Lorentz model as function of E (in eV)
     eps_TL = lambda E: 1/E*A*E0*C*(E - Eg)**2/ \
@@ -369,7 +373,6 @@ def emt_brugg(fv_1,nk_1,nk_2):
     nk_eff: ndarray
         complex refractive index of effective media
     '''
-    from .utils import _ndarray_check
     
     # check simple cases first
     if fv_1 == 0:     # no inclusions
@@ -439,7 +442,6 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
               real part of dielectric constant
     '''
     from .utils import convert_units
-    from .utils import _ndarray_check
 
     lam, lam_isfloat = _ndarray_check(lam)
     cshift = complex(0, cshift)

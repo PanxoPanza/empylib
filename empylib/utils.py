@@ -1,3 +1,5 @@
+import numpy as np
+
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
 hbar = 1.0545718E-34            # J*s (plank's constan)
@@ -8,7 +10,6 @@ def _ndarray_check(x):
     '''
     check if x is not ndarray. If so, convert x to a 1d ndarray
     '''
-    import numpy as np
     
     if not isinstance(x, np.ndarray):
         return np.array([x]), True

@@ -14,6 +14,8 @@ import os
 import platform
 import numpy as np 
 import empylib as em
+from .utils import _ndarray_check
+from pathlib import Path
 
 def read_spectrafile(lam, MaterialName, get_from_local_path = False):
     '''
@@ -34,8 +36,6 @@ def read_spectrafile(lam, MaterialName, get_from_local_path = False):
         1.Interpolated complex refractive index
         2.Tabulated data used for interpolation (optional)
     '''
-    from .utils import _ndarray_check
-    from pathlib import Path
 
     # check if lam is not ndarray
     lam, lam_isfloat = _ndarray_check(lam)   
