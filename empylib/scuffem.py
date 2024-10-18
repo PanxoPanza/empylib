@@ -59,6 +59,6 @@ def make_scuff_runfiles(lam, Material=None):
             # export to a .dat file
             with open(f"{mat_label}.dat", 'w') as f:
                 for wi, epsilon in zip(w, eps):
-                    f.write(f"{wi:.6e} {epsilon.real:.4f}+{epsilon.imag:.4f}i\n")
+                    f.write(f"{wi:.6e} {epsilon.real:.5e}+{epsilon.imag:.5e}i\n")
 
 
