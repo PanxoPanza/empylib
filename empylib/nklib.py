@@ -576,6 +576,9 @@ Cu   = lambda lam: get_nkfile(lam, 'cu_Babar2015', get_from_local_path = True)[0
 # refractive index of Aluminium
 Al   = lambda lam: get_nkfile(lam, 'al_Rakic1995', get_from_local_path = True)[0]
 
+# refractive index of Magnesium
+Mg   = lambda lam: get_ri_info(lam, 'main', 'Mg', 'Hagemann')[0]
+
 #------------------------------------------------------------------------------
 #                                   Polymers
 # refractive index of HDPE
