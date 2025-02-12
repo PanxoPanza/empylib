@@ -496,6 +496,7 @@ def snell(n_1, n_2, th_1):
     it has angle th_1 in layer with refractive index n_1. Use Snell's law. Note
     that "angles" may be complex!!
     """
+    from numpy.lib.scimath import arcsin
     # Important that the arcsin here is numpy.lib.scimath.arcsin, not
     # numpy.arcsin! (They give different results e.g. for arcsin(2).)
     th_2_guess = arcsin(n_1*np.sin(th_1) / n_2)
@@ -510,6 +511,7 @@ def list_snell(n_list, th_0):
     using Snell's law. n_list is index of refraction of each layer. Note that
     "angles" may be complex!!
     """
+    from numpy.lib.scimath import arcsin
     # Important that the arcsin here is numpy.lib.scimath.arcsin, not
     # numpy.arcsin! (They give different results e.g. for arcsin(2).)
     print('n_list[0]', n_list[0])

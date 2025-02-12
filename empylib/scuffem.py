@@ -22,7 +22,7 @@ def make_scuff_runfiles(lam, Material=None):
     """
     # Constants
     c0 = 299792458  # speed of light in m/s
-    w = 2 * np.pi * c0 / lam * 1E6  # angular frequency
+    # w = 2 * np.pi * c0 / lam * 1E6  # angular frequency
 
     if Material is None:
         Material = {}
@@ -37,7 +37,9 @@ def make_scuff_runfiles(lam, Material=None):
                 f.write('\n')
 
     # Create frequency range for .dat files
-    lambda_mat = np.linspace(min(lam) * 0.9, max(lam) * 1.1, 200)
+    lambda_mat = np.insert(lam, 0, min(lam) * 0.9)
+    lambda_mat = np.append(lam, max(lam) * 1.1)
+    
     w = 2 * np.pi * c0 / lambda_mat * 1E6
 
     # export *.dat files
