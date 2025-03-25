@@ -180,7 +180,7 @@ def _get_coated_coefficients(m,x, nmax=-1):
     chi = np.sqrt(0.5*pi*ka)*yv(nu,ka) # chi(n,ka)
     xi  = phi + 1j*chi                    # xi(n,ka)
     
-    return an, bn, phi, Dn1[-1,:], xi, Gn1[-1,:]
+    return an.reshape(-1), bn.reshape(-1), phi, Dn1[-1,:].reshape(-1), xi, Gn1[-1,:].reshape(-1)
 
 def _cross_section_at_lam(m,x,nmax = -1):
     '''
@@ -494,4 +494,5 @@ def scatter_coeffients(lam,N_host,Np_shells,D, nmax = -1):
                 signature = '(n), (n), () -> (m), (m), (m), (m), (m), (m)')
 
     # outputs an and bn
-    return get_coefficients(m, x, nmax)[:2]
+    an, bn = get_coefficients(m, x, nmax)[:2]
+    return an.reshape(-1), bn.reshape(-1)

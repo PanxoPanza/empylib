@@ -499,7 +499,7 @@ def snell(n_1, n_2, th_1):
     from numpy.lib.scimath import arcsin
     # Important that the arcsin here is numpy.lib.scimath.arcsin, not
     # numpy.arcsin! (They give different results e.g. for arcsin(2).)
-    th_2_guess = arcsin(n_1*np.sin(th_1) / n_2)
+    th_2_guess = np.arcsin(n_1*np.sin(th_1) / n_2)
     if is_forward_angle(n_2, th_2_guess):
         return th_2_guess
     else:
