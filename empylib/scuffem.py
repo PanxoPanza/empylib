@@ -8,9 +8,10 @@ Created on Thu Oct 10 14:12 2024
 """
 
 import numpy as np
+import pandas as pd
 from . import nklib as nk
 
-def make_scuff_runfiles(lam, Material=None):
+def make_spectral_files(lam, Material=None):
     """
     Create OmegaList and dielectric properties files for scuff-EM simulations.
     
@@ -62,5 +63,50 @@ def make_scuff_runfiles(lam, Material=None):
             with open(f"{mat_label}.dat", 'w') as f:
                 for wi, epsilon in zip(w, eps):
                     f.write(f"{wi:.6e} {epsilon.real:.5e}+{epsilon.imag:.5e}i\n")
+def read_scatter_PFT(FileName):
+    # Extraemos la info en un dataframe
+    df = pd.read_csv(FileName,comment = '#', sep='\s+', header = None, index_col = 0)
 
+    # Asignar nombres a las columnas
+    df.columns = ['Label', 'Pabs', 'Psca', 'Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz']
+
+    # Establecer "omega" como índice
+    df.index.name = 'Omega'
+
+    # Identificar todas las etiquetas únicas en "surface"
+    unique_labels = df["Label"].unique()
+
+    # Crear un diccionario para guardar los DataFrames por etiqueta
+    objectID = {}
+
+    # Para cada etiqueta, crear un DataFrame con los datos correspondientes (excluyendo la columna 'surface')
+    for label in unique_labels:
+        objectID[label] = df[df["Label"] == label].drop(columns="Label")
+
+    return objectID
+
+def read_avescatter(FileName):
+    # Extraemos la info en un dataframe
+    df = pd.read_csv(FileName,comment = '#', sep='\s+', header = None, index_col = 1)
+
+    # Eliminamos la primera columna
+    df.drop([0], axis=1, inplace=True)
+
+    # Establecer "omega" como índice
+    df.index.name = 'Omega'
+
+    # Asignar nombres a las columnas
+    df.columns = ['Label', '<Cabs>', '<Csca>', '<Cpr>']
+
+    # Identificar todas las etiquetas únicas en "surface"
+    unique_labels = df["Label"].unique()
+
+    # Crear un diccionario para guardar los DataFrames por etiqueta
+    objectID = {}
+
+    # Para cada etiqueta, crear un DataFrame con los datos correspondientes (excluyendo la columna 'surface')
+    for label in unique_labels:
+        objectID[label] = df[df["Label"] == label].drop(columns="Label")
+
+    return objectID
 
