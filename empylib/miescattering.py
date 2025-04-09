@@ -7,6 +7,7 @@ Created on Mon Nov 22 23:38:11 2021
 import numpy as np
 from numpy import pi, exp, conj, imag, real, sqrt
 from scipy.special import jv, yv
+import pandas as pd
 
 def _log_RicattiBessel(x,nmax,nmx):
     '''
@@ -41,7 +42,7 @@ def _log_RicattiBessel(x,nmax,nmx):
     n = np.array(range(nmax))
     
     # Get Dn(x) by downwards recurrence
-    Dnx = np.zeros((len(x),nmx),dtype=np.complex_)
+    Dnx = np.zeros((len(x),nmx),dtype=np.complex128)
     for i in reversed(range(1, nmx)):
         # define D_(i+1) (x)
         # if i == nmx-1 : Dip1 = np.zeros(len(x))
@@ -50,7 +51,7 @@ def _log_RicattiBessel(x,nmax,nmx):
         Dnx[:,i-1] = (i+1)/x - 1/(Dnx[:,i] + (i+1)/x)
         
     # Get Gn(x) by upwards recurrence
-    Gnx = np.zeros((len(x),nmx),dtype=np.complex_)
+    Gnx = np.zeros((len(x),nmx),dtype=np.complex128)
     G0x = 1j*np.ones_like(x)
     i = 0
     Gnx[:,i] = 1/((i+1)/x - G0x) - (i+1)/x
@@ -62,7 +63,7 @@ def _log_RicattiBessel(x,nmax,nmx):
         Gnx[:,i] = 1/((i+1)/x - Gnx[:,i-1]) - (i+1)/x
     
     # Get Rn(x) by upwards recurrence
-    Rnx = np.zeros((len(x),len(n)),dtype=np.complex_) 
+    Rnx = np.zeros((len(x),len(n)),dtype=np.complex128) 
     for ix in range(len(x)):
         
         # note that 0.5*(1 - exp(-2j*x)) = 0 if x = pi*n
@@ -111,7 +112,7 @@ def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
 
     return an, bn
         
-def _get_coated_coefficients(m,x, nmax=-1):
+def _get_coated_coefficients(m,x, nmax=None):
     '''
     Compute the mie coefficients an and bn using recursion algorithm from
     Johnson, Appl. Opt. 35, 3286 (1996).
@@ -146,7 +147,7 @@ def _get_coated_coefficients(m,x, nmax=-1):
     ka = x[-1] # size parameter of outer layer
 
     # define nmax according to B.R Johnson (1996)
-    if nmax == -1 :
+    if nmax is None :
         nmax = int(np.round(np.abs(ka) + 4*np.abs(ka)**(1/3) + 2))
     
     #----------------------------------------------------------------------
@@ -182,7 +183,7 @@ def _get_coated_coefficients(m,x, nmax=-1):
     
     return an.reshape(-1), bn.reshape(-1), phi, Dn1[-1,:].reshape(-1), xi, Gn1[-1,:].reshape(-1)
 
-def _cross_section_at_lam(m,x,nmax = -1):
+def _cross_section_at_lam(m,x,nmax = None):
     '''
     NEED TO CHECK FLUCTUATION FOR LARGE PARTICLES (F. RAMIREZ 2024)
     Compute mie scattering parameters for a given lambda
@@ -224,7 +225,7 @@ def _cross_section_at_lam(m,x,nmax = -1):
     # determine nmax 
     y = x[-1] # size parameter of outer layer
 
-    if nmax == -1 :
+    if nmax is None :
         # define nmax according to B.R Johnson (1996)
         nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
 
@@ -266,8 +267,8 @@ def _cross_section_at_lam(m,x,nmax = -1):
     #------------------------------------------------------------------
     # Asymmetry parameter
     #------------------------------------------------------------------
-    anp1 = np.zeros(nmax,dtype=np.complex_)
-    bnp1 = np.zeros(nmax,dtype=np.complex_)
+    anp1 = np.zeros(nmax,dtype=np.complex128)
+    bnp1 = np.zeros(nmax,dtype=np.complex128)
     anp1[:nmax-1] = an[1:] # a(n+1) coefficient
     bnp1[:nmax-1] = bn[1:] # a(n+1) coefficient
     
@@ -293,7 +294,7 @@ def _cross_section_at_lam(m,x,nmax = -1):
     
     return Qext, Qsca, Asym, Qb, Qf
 
-def _check_mie_inputs(lam,N_host,Np_shells,D):
+def _check_mie_inputs(lam=None,N_host=None,Np_shells=None,D=None):
     '''
     Ckeck and organize mie inputs before running any simulations
     
@@ -335,57 +336,62 @@ def _check_mie_inputs(lam,N_host,Np_shells,D):
     '''
     
     # convert input variables to list
-    if np.isscalar(lam) : lam = np.array([lam,])
+    if lam is not None:
+        if np.isscalar(lam) : lam = np.array([lam,])
 
     # Verify D is float or list
-    #   1. solid sphere
-    if np.isscalar(D) : D = [D,]
-    #   2. multilayered sphere
-    else:
-        assert isinstance(D, list), 'diameter of shell layers must be on a list format'
-    
-    # convert list to ndarrays
-    D = np.array(D)
+    if D is not None:
+        #   1. solid sphere
+        if np.isscalar(D) : D = [D,]
+        #   2. multilayered sphere
+        else:
+            assert isinstance(D, list), 'diameter of shell layers must be on a list format'
+        
+        # convert list to ndarrays
+        D = np.array(D)
 
-    # Verify Np_shells is float, 1darray or list    
-    #   1.solid sphere constant refractive index
-    if np.isscalar(Np_shells): 
-        Np_shells = [Np_shells,]
-    #   2.solid sphere spectral refractive index
-    elif isinstance(Np_shells, np.ndarray) and Np_shells.ndim ==1:
-        Np_shells = [Np_shells,]
-    #   3. multilayered sphere
-    else:
-        assert isinstance(Np_shells, list), 'refractive index of shell layers must be on a list format'
+    # Verify Np_shells is float, 1darray or list 
+    if Np_shells is not None:
+        #   1.solid sphere constant refractive index
+        if np.isscalar(Np_shells): 
+            Np_shells = [Np_shells,]
+        #   2.solid sphere spectral refractive index
+        elif isinstance(Np_shells, np.ndarray) and Np_shells.ndim ==1:
+            Np_shells = [Np_shells,]
+        #   3. multilayered sphere
+        else:
+            assert isinstance(Np_shells, list), 'refractive index of shell layers must be on a list format'
     
     # if multilayered sphere, check refractive index and D match in length
-    assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
+    if Np_shells is not None and D is not None:
+        assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
 
-    # analize Np_shells and rearrange to ndarray if float
-    Np = []
-    for Ni in Np_shells:
-        if np.isscalar(Ni):            # convert to ndarray if float
-            Ni = np.ones(len(lam))*Ni
-        else: 
-            assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
-        Np.append(Ni.astype(complex))
-    Np = np.array(Np).reshape(len(D),len(lam))
+        # analize Np_shells and rearrange to ndarray if float
+        Np = []
+        for Ni in Np_shells:
+            if np.isscalar(Ni):            # convert to ndarray if float
+                Ni = np.ones(len(lam))*Ni
+            else: 
+                assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
+            Np.append(Ni.astype(complex))
+        Np = np.array(Np).reshape(len(D),len(lam))
 
-    # sort layers from inner to outer shell
-    idx = np.argsort(D)
-    D = D[idx]
-    Np = Np[idx,:]
+        # sort layers from inner to outer shell
+        idx = np.argsort(D)
+        D = D[idx]
+        Np_shells = Np[idx,:]
 
     # analyze N_host and rearrange to ndarray if float
-    if np.isscalar(N_host):             # convert to ndarray if float
-        Nh = np.ones(len(lam), dtype = complex)*N_host
-    else: 
-        assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
-        Nh = np.copy(N_host.astype(complex))
+    if N_host is not None and lam is not None:
+        if np.isscalar(N_host):             # convert to ndarray if float
+            N_host = np.ones(len(lam), dtype = complex)*N_host
+        else: 
+            assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
+            N_host = np.copy(N_host.astype(complex))
 
-    return lam, Nh, Np, D 
+    return lam, N_host, Np_shells, D 
 
-def scatter_efficiency(lam,N_host,Np_shells,D,nmax=-1):
+def scatter_efficiency(lam,N_host,Np_shells,D,nmax=None):
     
     '''
     Compute mie scattering parameters for multi-shell spherical particle.
@@ -412,7 +418,7 @@ def scatter_efficiency(lam,N_host,Np_shells,D,nmax=-1):
             list:  multilayered sphere
 
     nmax: int, optional  
-        Number of mie scattering coefficients. Default nmax = -1
+        Number of mie scattering coefficients. Default None
     
     Returns
     -------
@@ -438,7 +444,7 @@ def scatter_efficiency(lam,N_host,Np_shells,D,nmax=-1):
     # outputs: qext, qsca, gcos
     return get_cross_section(m, x, nmax)[:3] 
     
-def scatter_coeffients(lam,N_host,Np_shells,D, nmax = -1):
+def scatter_coeffients(lam,N_host,Np_shells,D, nmax = None):
     
     '''
     Compute mie scattering coefficients an and bn for multi-shell spherical 
@@ -466,7 +472,7 @@ def scatter_coeffients(lam,N_host,Np_shells,D, nmax = -1):
             list:  multilayered sphere
 
     nmax: int, optional  
-        Number of mie scattering coefficients. Default nmax = -1
+        Number of mie scattering coefficients. Default None
 
     Returns
     -------
@@ -485,7 +491,7 @@ def scatter_coeffients(lam,N_host,Np_shells,D, nmax = -1):
     m = m.transpose()
 
     # determine nmax 
-    if nmax == -1 :
+    if nmax is None :
         y = max(x[-1,:]) # largest size parameter of outer layer
         # define nmax according to B.R Johnson (1996)
         nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
@@ -495,4 +501,209 @@ def scatter_coeffients(lam,N_host,Np_shells,D, nmax = -1):
 
     # outputs an and bn
     an, bn = get_coefficients(m, x, nmax)[:2]
-    return an.reshape(-1), bn.reshape(-1)
+    return an.reshape(-1, nmax), bn.reshape(-1, nmax)
+
+def _pi_tau_1n(theta, nmax):
+    """
+    Compute the scalar tesseral function π_1n(θ) and τ_1n(θ)
+    The arrays start with n = 1
+
+    Adapted from the miepython library: https://github.com/scottprahl/miepython
+    Original Author: Scott Prahl
+    Modifications by: Francisco Ramírez (2025)
+    
+    Parameters:
+        theta (ndarray): Polar angle θ in radians.
+        nmax (int): Max degree of the associated Legendre polynomial.
+        
+    Returns:
+        ndarray: π_1n(θ) = P_n^1(cos𝜃) / sin𝜃.
+        ndarray: τ_1n(θ) = d/d𝜃 P_n^1(cos𝜃).
+    """
+    mu = np.cos(theta)  # x = cos(θ)
+
+    pi  = np.zeros((nmax, len(mu)))
+    tau = np.zeros((nmax, len(mu)))
+    
+    pi_nm2 = 0
+    pi[0] = np.ones_like(mu)
+    
+    for n in range(1, nmax):
+        tau[n - 1] =            n * mu * pi[n - 1] - (n + 1) * pi_nm2
+        temp = pi[n - 1]
+        pi [n    ] = ((2 * n + 1) * mu * temp        - (n + 1) * pi_nm2) / n
+        pi_nm2 = temp
+        
+    return pi, tau
+
+def scat_amplitude_S1_S2(theta, lam,N_host,Np_shells,D, nmax = None):
+    """
+    Calculate the scattering amplitude functions for spheres.
+
+    The amplitude functions have been normalized so that when integrated
+    over all 4*pi solid angles, the integral will be qext*pi*x**2.
+
+    Adapted from the miepython library: https://github.com/scottprahl/miepython
+    Original Author: Scott Prahl
+    Modifications by: Francisco Ramírez (2025)
+
+    Parameters:
+        theta (ndarray or float): Scattering angle (radians)
+
+        lam (ndarray or float): wavelengtgh (microns)
+        
+        N_host (ndarray or float): Complex refractive index of host. If 
+                                   ndarray, len = lam
+        
+        Np_shells (float, 1darray or list): Complex refractive index of each 
+                                            shell layer. The number of elements 
+                                            must be equal to len(D). 
+            Options are:
+            float:   solid sphere and constant refractive index
+            1darray: solid sphere and spectral refractive index (len = lam)
+            list:    multilayered sphere (with both constant or spectral refractive indexes)
+        
+        D (float or list): Outter diameter of each shell's layer (microns). 
+            Options are:
+            float: solid sphere
+            list:  multilayered sphere
+
+        nmax (int, optional): Number of mie scattering coefficients. Default None
+
+    Returns:
+        S1, S2: the scattering amplitudes at each angle mu [sr**(-0.5)]
+    """
+    # convert input variables to array
+    if np.isscalar(theta) : theta = np.array([theta,])
+    if np.isscalar(lam) : theta = np.array([lam,])
+
+    # Extract mie scattering coefficients
+    an, bn = scatter_coeffients(lam,N_host,Np_shells,D, nmax)
+    nmax = an.shape[1]
+
+    # get pi and tau angular functions
+    pi, tau = _pi_tau_1n(theta, nmax)
+
+    # set scale for sumation
+    n = np.arange(1, nmax + 1)
+    scale = (2 * n + 1) / ((n + 1) * n)
+
+    mu = np.cos(theta)
+
+    # compute S1 and S2
+    S1 = np.zeros((len(mu), len(lam)), dtype=np.complex128)
+    S2 = np.zeros((len(mu), len(lam)), dtype=np.complex128)
+    for k in range(len(mu)):
+        S1[k] = np.dot(scale* pi[:,k],an.T) + np.dot(scale*tau[:,k],bn.T)
+        S2[k] = np.dot(scale*tau[:,k],an.T) + np.dot(scale* pi[:,k],bn.T)
+
+    return S1, S2
+
+def phase_function(theta, lam,N_host,Np_shells,D, nmax = None):
+    """
+    Calculate the scattering phase function for unpolarized light. The 
+    intensity is normalized such that the integral is equal to qsca
+
+    Adapted from the miepython library: https://github.com/scottprahl/miepython
+    Original Author: Scott Prahl
+    Modifications by: Francisco Ramírez (2025)
+
+    Parameters:
+        theta (ndarray or float): Scattering angle (radians)
+
+        lam (ndarray or float): wavelengtgh (microns)
+        
+        N_host (ndarray or float): Complex refractive index of host. If 
+                                   ndarray, len = lam
+        
+        Np_shells (float, 1darray or list): Complex refractive index of each 
+                                            shell layer. The number of elements 
+                                            must be equal to len(D). 
+            Options are:
+            float:   solid sphere and constant refractive index
+            1darray: solid sphere and spectral refractive index (len = lam)
+            list:    multilayered sphere (with both constant or spectral refractive indexes)
+        
+        D (float or list): Outter diameter of each shell's layer (microns). 
+            Options are:
+            float: solid sphere
+            list:  multilayered sphere
+
+        nmax (int, optional): Number of mie scattering coefficients. Default None
+
+    Returns:
+        phase_fun: the scattering phase function
+    """
+    # Get scattering amplitude function
+    s1, s2 = scat_amplitude_S1_S2(theta, lam,N_host,Np_shells,D)
+
+    # Organize D format
+    _, Nh, _, D = _check_mie_inputs(lam = lam, N_host = N_host, D = D)
+
+    # Scale factor
+    x = np.pi/lam*D[-1]/Nh.real
+    scale_factor = np.pi*x**2
+
+    phase_fun = 1/scale_factor*(np.abs(s1)**2 + np.abs(s2)**2)/2
+
+    df_phase_fun = pd.DataFrame(data=phase_fun, 
+                            index=np.degrees(theta), 
+                            columns=lam)
+    return df_phase_fun
+
+def qsca_gcos_from_phase_function(phase_fun):
+    """
+    Compute Qsca and <cos theta> from a DataFrame whose rows are labeled
+    with scattering angles in degrees and columns with wavelengths.
+    
+    Parameters
+    ----------
+    D : float or list
+        Outter diameter of each shell's layer (microns). Options are:
+            float: solid sphere
+            list:  multilayered sphere
+
+    N_host (ndarray or float): Complex refractive index of host. If 
+                    ndarray, len = lam
+
+    phase_fun : pd.DataFrame
+        Phase function. Row index must be theta in degrees from 0 to over 180.
+        Columns correspond to different wavelengths.
+
+    Returns
+    -------
+    qsca : ndarray
+        Scattering efficiency for each column.
+        
+    gcos : ndarray
+        Asymmetry parameter for each column.
+    """
+    # Organize D format
+    # _, Nh, _, D = _check_mie_inputs(N_host = N_host, D = D)
+
+    # Step 1: Sort index by angle
+    phase_fun = phase_fun.sort_index()
+    lam = phase_fun.columns.to_numpy()  # wavelength (um)
+    # x = np.pi/lam*D[-1]/Nh              # size parameter
+
+    # Step 2: Subset to angles [0°, 180°]
+    subset = phase_fun.loc[(phase_fun.index >= 0) & (phase_fun.index <= 180)]
+
+    # Step 3: Validation
+    theta = subset.index.to_numpy()
+    if len(theta) < 2:
+        raise ValueError("Not enough angle samples between 0 and 180 degrees.")
+
+    if not np.isclose(theta[0], 0, atol=3) or not np.isclose(theta[-1], 180, atol=3):
+        raise ValueError("Selected theta range must span from 0 to 180 degrees.")
+
+    if not np.all(np.diff(theta) > 0):
+        raise ValueError("Theta values must be strictly increasing — no duplicates allowed.")
+
+    mu = np.cos(np.radians(theta))
+    p_theta = subset.values
+    # p_theta = subset.values[np.argsort(mu)]
+    # mu.sort()
+    qsca = - 2 * np.pi * np.trapz(p_theta, mu, axis=0)
+    gcos = - 2 * np.pi * np.trapz(mu*p_theta.T, mu, axis=1)/qsca
+    return qsca, gcos

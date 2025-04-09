@@ -503,7 +503,7 @@ def snell(n_1, n_2, th_1):
     if is_forward_angle(n_2, th_2_guess):
         return th_2_guess
     else:
-        return pi - th_2_guess
+        return np.pi - th_2_guess
 
 def list_snell(n_list, th_0):
     """
@@ -520,7 +520,7 @@ def list_snell(n_list, th_0):
     # The first and last entry need to be the forward angle (the intermediate
     # layers don't matter, see https://arxiv.org/abs/1603.02720 Section 5)
     if not is_forward_angle(n_list[0], angles[0]):
-        angles[0] = pi - angles[0]
+        angles[0] = np.pi - angles[0]
     if not is_forward_angle(n_list[-1], angles[-1]):
-        angles[-1] = pi - angles[-1]
+        angles[-1] = np.pi - angles[-1]
     return angles
