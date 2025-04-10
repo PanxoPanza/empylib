@@ -536,9 +536,10 @@ def _pi_tau_1n(theta, nmax):
         
     return pi, tau
 
-def scat_amplitude_S1_S2(theta, lam,N_host,Np_shells,D, nmax = None):
+def scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax = None):
     """
-    Calculate the scattering amplitude functions for spheres.
+    Calculate the elements S1 (S11) and S2 (S22) of the scattering matrix for spheres.
+    * For spheres S12 = S21 = 0
 
     The amplitude functions have been normalized so that when integrated
     over all 4*pi solid angles, the integral will be qext*pi*x**2.
@@ -599,14 +600,9 @@ def scat_amplitude_S1_S2(theta, lam,N_host,Np_shells,D, nmax = None):
 
     return S1, S2
 
-def phase_function(theta, lam,N_host,Np_shells,D, nmax = None):
+def scatter_stokes(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = False):
     """
-    Calculate the scattering phase function for unpolarized light. The 
-    intensity is normalized such that the integral is equal to qsca
-
-    Adapted from the miepython library: https://github.com/scottprahl/miepython
-    Original Author: Scott Prahl
-    Modifications by: Francisco Ramírez (2025)
+    Calculate the Stokes parameters S11, S12, S33 and S34 of a sphere. 
 
     Parameters:
         theta (ndarray or float): Scattering angle (radians)
@@ -614,11 +610,10 @@ def phase_function(theta, lam,N_host,Np_shells,D, nmax = None):
         lam (ndarray or float): wavelengtgh (microns)
         
         N_host (ndarray or float): Complex refractive index of host. If 
-                                   ndarray, len = lam
+                                   ndarray, len(N_host) == len(lam)
         
         Np_shells (float, 1darray or list): Complex refractive index of each 
-                                            shell layer. The number of elements 
-                                            must be equal to len(D). 
+                                            shell layer. Np_shells.shape[1] == len(D). 
             Options are:
             float:   solid sphere and constant refractive index
             1darray: solid sphere and spectral refractive index (len = lam)
@@ -631,11 +626,65 @@ def phase_function(theta, lam,N_host,Np_shells,D, nmax = None):
 
         nmax (int, optional): Number of mie scattering coefficients. Default None
 
+        as_ndarray (bool): True if user wants the output as ndarray. Otherwise, 
+        the output is a pd.DataFrame. Default False
+
     Returns:
-        phase_fun: the scattering phase function
+        phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
     """
-    # Get scattering amplitude function
-    s1, s2 = scat_amplitude_S1_S2(theta, lam,N_host,Np_shells,D)
+    # Get scattering amplitude elements S1 and S2
+    s1, s2 = scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax)
+
+    # Organize D format
+    _, Nh, _, D = _check_mie_inputs(lam = lam, N_host = N_host, D = D)
+
+    # Compute stokes parameters
+    S11 =1/2*(np.abs(s1)**2 + np.abs(s2)**2)
+    S12 =1/2*(np.abs(s1)**2 - np.abs(s2)**2)
+    S33 =1/2*(S2.conj()*S1 + S2*S1.conj())
+    S34 =1*2*(S2.conj()*S1 - S2*S1.conj())
+
+    return S11, S12, S33, S34
+
+def phase_scatt(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = False):
+    """
+    Calculate the scattering phase function. The intensity is normalized 
+    such that the integral is equal to qsca
+
+    Adapted from the miepython library: https://github.com/scottprahl/miepython
+    Original Author: Scott Prahl
+    Modifications by: Francisco Ramírez (2025)
+
+    Parameters:
+        theta (ndarray or float): Scattering angle (radians)
+
+        lam (ndarray or float): wavelengtgh (microns)
+        
+        N_host (ndarray or float): Complex refractive index of host. If 
+                                   ndarray, len(N_host) == len(lam)
+        
+        Np_shells (float, 1darray or list): Complex refractive index of each 
+                                            shell layer. Np_shells.shape[1] == len(D). 
+            Options are:
+            float:   solid sphere and constant refractive index
+            1darray: solid sphere and spectral refractive index (len = lam)
+            list:    multilayered sphere (with both constant or spectral refractive indexes)
+        
+        D (float or list): Outter diameter of each shell's layer (microns). 
+            Options are:
+            float: solid sphere
+            list:  multilayered sphere
+
+        nmax (int, optional): Number of mie scattering coefficients. Default None
+
+        as_ndarray (bool): True if user wants the output as ndarray. Otherwise, 
+        the output is a pd.DataFrame. Default False
+
+    Returns:
+        phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
+    """
+    # Get scattering amplitude elements S1 and S2
+    s1, s2 = scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax)
 
     # Organize D format
     _, Nh, _, D = _check_mie_inputs(lam = lam, N_host = N_host, D = D)
@@ -644,14 +693,58 @@ def phase_function(theta, lam,N_host,Np_shells,D, nmax = None):
     x = np.pi/lam*D[-1]/Nh.real
     scale_factor = np.pi*x**2
 
+    # Compute phase function
     phase_fun = 1/scale_factor*(np.abs(s1)**2 + np.abs(s2)**2)/2
 
+    # return phase function as ndarray
+    if as_ndarray: return phase_fun
+
+    # if not convert phase function to dataframe
     df_phase_fun = pd.DataFrame(data=phase_fun, 
                             index=np.degrees(theta), 
                             columns=lam)
+
     return df_phase_fun
 
-def qsca_gcos_from_phase_function(phase_fun):
+def phase_scatt_HG(theta, lam, gcos, qsca = 1, as_ndarray = False):
+    """
+    Compute the Heyney-Greenstein phase function
+
+    Parameters
+        theta : float or ndarray
+            Scatttering angle (radians)
+        gcos : float or ndarray
+            Asymmetry parameter
+        qsca: float or ndarray (optional)
+            Scattering efficiency. If 1, then integral of phase function = 1.
+            Default 1
+
+    Return
+        p_theta_HG: float or ndarray
+            Phase function
+    """
+    if np.isscalar(theta): theta = np.array([theta])
+    if np.isscalar(gcos): theta = np.array([gcos])
+    if not np.isscalar(qsca) and (len(qsca) != len(gcos)): 
+        raise ValueError("qsca and gcos must be of same size.")
+
+    gg, tt = np.meshgrid(gcos, theta)
+
+    p_theta_HG = 1/(4*np.pi)*(1 - gg**2)/(1 + gg**2 - 2*gg*np.cos(tt))**(3/2)
+
+    p_theta_HG = qsca*p_theta_HG
+
+    # return phase function as ndarray
+    if as_ndarray: return p_theta_HG
+
+    # if not convert phase function to dataframe
+    df_phase_fun = pd.DataFrame(data=p_theta_HG, 
+                            index=np.degrees(theta), 
+                            columns=lam)
+
+    return df_phase_fun
+    
+def scatter_from_phase_function(phase_fun):
     """
     Compute Qsca and <cos theta> from a DataFrame whose rows are labeled
     with scattering angles in degrees and columns with wavelengths.
@@ -701,9 +794,235 @@ def qsca_gcos_from_phase_function(phase_fun):
         raise ValueError("Theta values must be strictly increasing — no duplicates allowed.")
 
     mu = np.cos(np.radians(theta))
-    p_theta = subset.values
-    # p_theta = subset.values[np.argsort(mu)]
-    # mu.sort()
-    qsca = - 2 * np.pi * np.trapz(p_theta, mu, axis=0)
-    gcos = - 2 * np.pi * np.trapz(mu*p_theta.T, mu, axis=1)/qsca
+
+    # Sort phase function and mu in ascending order
+    p_theta = subset.values[np.argsort(mu)]
+    mu.sort()
+
+    # compute scattering efficiency and asymmetry parameter
+    qsca = 2 * np.pi * np.trapz(p_theta, mu, axis=0)
+    gcos = 2 * np.pi * np.trapz(mu*p_theta.T, mu, axis=1)/qsca
     return qsca, gcos
+
+def _mono_percus_yevick(fv, q, D):
+    """
+    Compute the Percus-Yevick structure factor S(q) for monodispersed 
+    hard-sphere systems.
+
+    References: Kinning, D. J., & Thomas, E. L. (1984). 
+                Hard-Sphere Interactions between Spherical Domains in Diblock Copolymers. 
+                Macromolecules, 17(9), 1712–1718.
+
+    Parameters:
+    -----------
+    fv : float
+        Volume fraction (phi) of the spheres.
+    q : float
+        Magnitude of the scattering vector.
+    D : float 
+        Diameter of the sphere.
+
+    Returns:
+    --------
+    S_q : float
+        Structure factor evaluated at q.
+    """
+    if not isinstance(D, float) and not isinstance(D, int):
+        raise ValueError("For monodisperse case, D must be a float or int.")
+    
+    R = D / 2
+    x = 2 * q * R  # Scattering variable as defined by Kinning & Thomas
+
+    # Coefficients from Eq. (17)
+    α = (1 + 2 * fv)**2 / (1 - fv)**4
+    β = -6 * fv * (1 + fv / 2)**2 / (1 - fv)**4
+    γ = 0.5 * fv * (1 + 2 * fv)**2 / (1 - fv)**4
+
+    # G(A) from Eq. (21)
+    term1 = α / x**2 * (np.sin(x) - x * np.cos(x))
+    term2 = β / x**3 * (2 * x * np.sin(x) + (2 - x**2) * np.cos(x) - 2)
+    term3 = γ / x**5 * (-x**4 * np.cos(x) +
+                        4 * ((3 * x**2 - 6) * np.cos(x) +
+                                (x**3 - 6 * x) * np.sin(x) + 6))
+    G_kt = term1 + term2 + term3
+
+    # Structure factor from Eq. (20)
+    S_q = 1 / (1 + 24 * fv * G_kt / x)
+    return S_q
+
+def _poly_percus_yevick(fv, qq, D, nD):
+    """
+    Compute the Percus-Yevick structure factor S(q) for polydisperse 
+    hard-sphere systems.
+
+    References: Botet, R., Kwok, R., & Cabane, B. (2020). 
+                Percus–Yevick structure factors made simple. 
+                Journal of Applied Crystallography, 53(6), 1526–1534.
+
+    Parameters:
+    -----------
+    fv : float
+        Volume fraction (phi) of the spheres.
+    qq : ndarray
+        Magnitude of the scattering vector.
+    D : ndarray
+        Diameter of the spheres
+    nD : np.ndarray or None
+        Probability distribution over D (same length as D). If None, assumes monodisperse.
+
+    Returns:
+    --------
+    S_q : float
+        Structure factor evaluated at q.
+    """
+    if not isinstance(D, np.ndarray) or not isinstance(nD, np.ndarray):
+        raise ValueError("D and nD must be numpy arrays in the polydisperse case.")
+        
+    if D.shape != nD.shape:
+        raise ValueError("D and nD must have the same shape.")
+
+    R = D / 2
+
+    # Weighted average over size distribution
+    average = lambda f: np.trapz(f * nD, R, axis = 1)  
+
+    # if fv > 0.5, compute structure factor for voids
+    # "complementary PY hard-sphere approach"
+    if fv > 0.5:
+        R = (1 - fv)/fv*R
+        fv = 1 - fv
+
+    S_q = np.zeros_like(qq)
+    for i in range(qq.shape[0]):
+        q = np.meshgrid(R, qq[i,:])[1]
+        
+        x = q * R  # Scattering vector scaled by radius
+        
+        # Psi is an auxiliary prefactor: psi = 3*phi / (1 - phi)
+        psi = 3 * fv / (1 - fv)
+    
+        # Trigonometric building blocks for structure factor (Botet et al., Eqs. 8–13)
+        Fcs = np.cos(x) + x * np.sin(x)  # cos(x) + x·sin(x)
+        Fsc = np.sin(x) - x * np.cos(x)  # sin(x) - x·cos(x)
+    
+        # Botet et al. expressions for b, c, d, e, f, g
+        b = psi * average(Fcs * Fsc) / average(x**3)
+        c = psi * average(Fsc**2) / average(x**3)
+        d = 1 + psi * average(x**2 * np.sin(x) * np.cos(x)) / average(x**3)
+        e = psi * average(x**2 * np.sin(x)**2) / average(x**3)
+        f = psi * average(x * np.sin(x) * Fsc) / average(x**3)
+        g = - psi * average(x * np.cos(x) * Fsc) / average(x**3)
+        # print(c)
+        
+        # Auxiliary variables for S(q)
+        denom = d**2 + e**2
+        X = 1 + b + (2 * e * f * g + d * (f**2 - g**2)) / denom
+        Y = c + (2 * d * f * g - e * (f**2 - g**2)) / denom
+    
+        # Final expression of S(q) (Eq. 4)
+        S_q[i,:] = (Y / c) / (X**2 + Y**2)
+        
+    return S_q
+
+def structure_factor_PY(theta, lam, Nh, D, fv, nD=None):
+    """
+    Compute the Percus-Yevick structure factor S(q) for hard-sphere systems,
+    for both monodisperse and polydisperse cases.
+
+    Parameters:
+    -----------
+    fv : float
+        Volume fraction (phi) of the spheres.
+    lam : float or ndarray
+        Wavelength range (um)
+    Nh: float or ndarray
+        Refractive index of host. If ndarray, len(Nh) == len(lam)
+    D : float or np.ndarray
+        Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
+    nD : np.ndarray or None
+        Probability distribution over D (same length as D). If None, assumes monodisperse.
+
+    Returns:
+    --------
+    S_q : float
+        Structure factor evaluated at q.
+
+    Raises:
+    -------
+    ValueError
+        If inputs are inconsistent or invalid.
+    """    
+    if isinstance(theta, float): theta = np.array([theta])
+    
+    lam, Nh, _, _ = _check_mie_inputs(lam, Nh)
+    
+    # compute scattering vector (q = 2k0*sin(theta/2))
+    k0 = 2*np.pi*Nh.real/lam
+    q = np.outer(2*k0, np.sin(theta/2))
+
+    q[q < 0.1] = 0.1  # Found overflow for q < 0.1
+    
+    if nD is None:
+        S_q = _mono_percus_yevick(fv, q, D).T
+
+    else:
+        S_q = _poly_percus_yevick(fv, q, D, nD).T
+    
+    return S_q
+
+def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD = None, nmax = None, as_ndarray = False):
+    """
+    Calculate the scattering phase function for multiple hard-spheres under unpolarized light. 
+    The intensity is normalized such that the integral is equal to qsca
+
+    Parameters:
+        theta : ndarray or float
+            Scattering angle (radians)
+
+        lam : ndarray or float 
+            Wavelengtgh (microns)
+        
+        N_host : ndarray or float 
+            Complex refractive index of host. If ndarray, len(N_host) == len(lam)
+        
+        Np : float or ndarray
+            Complex refractive index of the sphere. If ndarray, len(Np) == len(lam). 
+        
+        D : float or np.ndarray
+            Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
+        
+        fv: float
+            Filling fraction
+        
+        nD: ndarray
+            Diameter density distribution. len(nD) == D
+
+        nmax : int (optional)
+            Number of mie scattering coefficients. Default None
+
+        as_ndarray : bool (optional)
+            True if user wants the output as ndarray. Otherwise, the output is a pd.DataFrame. 
+            Default False
+
+    Returns:
+        phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
+    """
+    
+    # Get form factor
+    F_theta = phase_scatt(theta, lam, N_host, Np ,D, nmax, as_ndarray = True)
+    
+    # Get structure factor
+    S_q = structure_factor_PY(theta, lam, N_host, D, fv, nD)
+
+    phase_fun = F_theta*S_q
+
+    # return phase function as ndarray
+    if as_ndarray: return phase_fun
+
+    # if not convert phase function to dataframe
+    df_phase_fun = pd.DataFrame(data=phase_fun, 
+                            index=np.degrees(theta), 
+                            columns=lam)
+
+    return df_phase_fun
+
