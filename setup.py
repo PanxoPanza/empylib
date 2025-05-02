@@ -27,11 +27,13 @@ setup(
     package_data={'': ['LICENSE', 'NOTICE', '*.nk', '*.txt']},
     license=get_init_val('license'),
     keywords='electromagnetism',
-    install_requires=['numpy',
-                      'scipy',
-                      'iadpython',
-                      'refidx',
-                      'pandas'
-                      ],
+    install_requires=[
+        'numpy>=1.15.0',     # or >=1.20.0 if you want a more modern floor
+        'pandas>=0.24.0',    # or >=1.0.0 for better support
+        'scipy>=1.1.0',
+        'pyyaml>=5.1',
+        'requests>=2.18.0',
+        'iadpython'
+    ],
     packages=find_packages(include=[package_name, package_name + '.*']),
 )

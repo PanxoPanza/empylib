@@ -105,7 +105,7 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     
     return Ttot, Rtot, Tspec
 
-def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
+def adm_sphere(lam,tfilm,Nlayers,fv,D,Np, diffuse = False):
     '''
     Reflectivitiy and transmissivity for a film with spherical particles. This 
     function considers multiple scattering using adding-doubling method (adm) from 
@@ -132,6 +132,9 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     Np : ndarray or float
         Refractive index of particles. If ndarray, the size must be equal to
         len(lam)
+
+    diffuse: bool
+        Set diffuse approximation. If True, gcos = 0
 
     Returns
     -------    
@@ -180,6 +183,8 @@ def adm_sphere(lam,tfilm,Nlayers,fv,D,Np):
     # compute scattering and absorption coefficients
     k_sca = fv/Vp*Csca
     k_abs = fv/Vp*Cabs
+
+    if diffuse: gcos = gcos*0
 
     return adm(lam,tfilm, k_sca, k_abs, gcos, Nh, N_up, N_dw)
 
@@ -242,6 +247,8 @@ def adm(lam,tfilm, k_sca, k_abs, gcos, Nh, Nup=1.0, Ndw=1.0):
         a = mu_s/(mu_a+mu_s)
         b = (mu_a+mu_s)*d
         
+    if Nh.real < 1: Nh = 1             # iad throws error if Nh < 1 (Need fix iad: PENDING)
+
     # Set sample for adding-doubling simulation
     s = iad.Sample(a=a, b=b, g=g, d=d,  
                    n=Nh.real, n_above=Nup.real, n_below=Ndw.real)

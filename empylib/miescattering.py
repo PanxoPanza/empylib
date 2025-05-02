@@ -292,6 +292,14 @@ def _cross_section_at_lam(m,x,nmax = None):
     q = np.sum(f)
     Qf = real(q*conj(q)/y**2)
     
+    #------------------------------------------------------------------
+    # Condition outputs to avoid unphysical results
+    #------------------------------------------------------------------
+    if Qsca < 0: Qsca = 0
+    if Qext < Qsca: Qext = Qsca
+    if Asym < -1: Asym = -1
+    if Asym > +1: Asym = +1
+
     return Qext, Qsca, Asym, Qb, Qf
 
 def _check_mie_inputs(lam=None,N_host=None,Np_shells=None,D=None):
@@ -641,8 +649,8 @@ def scatter_stokes(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = Fals
     # Compute stokes parameters
     S11 =1/2*(np.abs(s1)**2 + np.abs(s2)**2)
     S12 =1/2*(np.abs(s1)**2 - np.abs(s2)**2)
-    S33 =1/2*(S2.conj()*S1 + S2*S1.conj())
-    S34 =1*2*(S2.conj()*S1 - S2*S1.conj())
+    S33 =1/2*(s2.conj()*s1 + s2*s1.conj())
+    S34 =1*2*(s2.conj()*s1 - s2*s1.conj())
 
     return S11, S12, S33, S34
 

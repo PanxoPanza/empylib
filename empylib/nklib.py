@@ -15,6 +15,11 @@ from warnings import warn
 from typing import Callable # used to check callable variables
 from .utils import _ndarray_check
 from pathlib import Path
+# import refidx as ri
+from .utils import convert_units
+import yaml
+import requests
+from io import StringIO
 
 def get_nkfile(lam, MaterialName, get_from_local_path = False):
     '''
@@ -82,6 +87,28 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     return complex(N[0]) if lam_isfloat else N, nk_df
     # return N(lam), nk_df
 
+def read_nk_yaml_from_ri_info(url):
+    """
+    Reads a YAML file containing 'nk' tabulated optical data from a URL and returns:
+    - lam: ndarray of wavelengths
+    - nk: ndarray of complex refractive indices (n + ik)
+    """
+    # Download YAML content
+    response = requests.get(url)
+    response.raise_for_status()
+
+    # Parse YAML content
+    yaml_data = yaml.safe_load(response.text)
+
+    # Extract tabulated data block
+    nk_text = yaml_data['DATA'][0]['data']
+
+    # Read into DataFrame using regex-based separator
+    nk_df = pd.read_csv(StringIO(nk_text), sep=r'\s+', names=['wavelength', 'n', 'k'])
+
+    return nk_df
+
+
 def get_ri_info(lam,shelf,book,page):
     '''
     Extract refractive index from refractiveindex.info database. This code
@@ -106,12 +133,20 @@ def get_ri_info(lam,shelf,book,page):
         Original tabulated data from file
     '''
 
-    import refidx as ri
-    db = ri.DataBase()
-    mat = db.materials[shelf][book][page]
-    matLambda = np.array(mat.material_data["wavelengths"])
-    matN = np.array(mat.material_data["index"])
-    N = np.interp(lam, matLambda, matN)
+    url_root = 'https://refractiveindex.info/database/data/' 
+    url = url_root  + shelf + '/'  + book  + '/nk/' + page + '.yml'
+    nk_df = read_nk_yaml_from_ri_info(url)
+
+    
+    # Convert to NumPy arrays
+    matLambda = nk_df['wavelength'].to_numpy()
+    mat_nk = nk_df['n'].to_numpy() + 1j*nk_df['k'].to_numpy()
+
+    # db = ri.DataBase()
+    # mat = db.materials[shelf][book][page]
+    # matLambda = np.array(mat.material_data["wavelengths"])
+    # matN = np.array(mat.material_data["index"])
+    N = np.interp(lam, matLambda, mat_nk)
     
     # warning if extrapolated values
     if lam[ 0] < matLambda[ 0] :
@@ -120,8 +155,7 @@ def get_ri_info(lam,shelf,book,page):
     if lam[-1] > matLambda[-1] :
         warn('Extrapolating from %.3f to %.3f' % (matLambda[-1], lam[-1]))
     
-    return N, mat.material_data
-
+    return N, nk_df
 '''
     --------------------------------------------------------------------
                     dielectric constant models
@@ -181,8 +215,6 @@ def eps_gaussian(A,Br,E0,lam):
     eps : ndarray (complex)
         Complex dielectric constant
     '''
-    from .utils import convert_units
-
     #  Gauss model as function of E (in eV)
     f = 0.5/np.sqrt(np.log(2)) # scaling constant
     eps_G = lambda E: A*np.exp(-(f*(E - E0)/Br)**2) \
@@ -485,6 +517,9 @@ SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013', get_from_local_p
 
 # refractive index of CaCO3
 CaCO3 = lambda lam: get_nkfile(lam, 'CaCO3_Palik', get_from_local_path = True)[0]
+
+# refractive index of BaF2
+BaF2 = lambda lam: get_ri_info(lam, 'main', 'BaF2', 'Querry')[0]
 
 # refractive index of TiO2
 TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
