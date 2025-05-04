@@ -10,67 +10,68 @@ Created on Fri Jan 21 16:05:48 2022
 @author: PanxoPanza
 """
 
-import os
-import platform
-import numpy as np 
-import empylib as em
-from .utils import _ndarray_check
-from pathlib import Path
+import numpy as _np 
+import empylib as _em
+from .utils import _ndarray_check, _local_to_global_angles
+from pathlib import Path as _Path
 
-def read_spectrafile(lam, MaterialName, get_from_local_path = False):
-    '''
-    Reads a textfile and returns an interpolated
-    1D numpy array with the complex refractive index
-    of the material
-    
+# Global cache for loaded files and interpolators
+_file_cache = {}
+
+def read_spectrafile(lam, MaterialName, get_from_local_path=False, return_data=False):
+    """
+    Reads a text file and returns an interpolated 1D NumPy array 
+    for the specified material's spectral data.
+
     Parameters
     ----------
-    lam : 1D numpy array
-        Wavelengths to interpolate (um).
-    MaterialName : string
-        Name of textfile (with extension)
+    lam : float or ndarray
+        Wavelengths (in µm) to interpolate.
+    MaterialName : str
+        Name of the file (with extension).
+    get_from_local_path : bool, optional
+        If True, reads from the script's folder instead of the working directory.
+    return_data : bool, optional
+        If True, returns both the interpolated values and the full data array.
 
     Returns
     -------
-    tupple with
-        1.Interpolated complex refractive index
-        2.Tabulated data used for interpolation (optional)
-    '''
+    out : ndarray
+        Interpolated values at requested wavelengths.
+    data : ndarray (optional)
+        Original tabulated data.
+    """
 
-    # check if lam is not ndarray
-    lam, lam_isfloat = _ndarray_check(lam)   
-    
-    # retrieve local path
+    lam = _np.atleast_1d(lam)
+
+    # Resolve path
     if get_from_local_path:
-        # if function is called locally
-        caller_directory = Path(__file__).parent / 'spectra_data'
-    else :
-        # if function is called from working directory (where the function is called)
-        caller_directory = Path.cwd()
-
-    # Construct the full path of the file
-    file_path = caller_directory / MaterialName   
-   
-    # check if file exist
-    assert file_path.exists(), 'File not found'
-    
-    # check number of columns in file
-    data = np.genfromtxt(file_path)
-    assert data.shape[1] <= 2, 'wrong file format'
-    
-    # run interpolation based on lam
-    if lam_isfloat:
-        len_lam = 1
+        caller_directory = _Path(__file__).parent / 'spectra_data'
     else:
-        len_lam = len(lam)
-    
-    out = np.zeros((len_lam,1))
-    out = np.interp(lam,data[:,0],data[:,1])
-    
-    # for extrapolated values make out = 0
-    out = out*(lam<=np.max(data[:,0]))*(lam>=np.min(data[:,0])) 
+        caller_directory = _Path.cwd()
 
-    return out, data
+    file_path = str(caller_directory / MaterialName)
+
+    # Check and load file from cache or disk
+    if file_path not in _file_cache:
+        # Load file
+        assert _Path(file_path).exists(), f"File not found: {file_path}"
+        data = _np.genfromtxt(file_path)
+
+        if data.ndim != 2 or data.shape[1] != 2:
+            raise ValueError("Invalid file format; expected two columns.")
+
+        # Save to cache
+        _file_cache[file_path] = data
+    else:
+        data = _file_cache[file_path]
+
+    # Interpolate
+    out = _np.interp(lam, data[:, 0], data[:, 1], left=0, right=0)
+
+    if return_data:
+        return out, data
+    return out
 
 def AM15(lam,spectra_type='global'):
     '''
@@ -90,19 +91,19 @@ def AM15(lam,spectra_type='global'):
     lam = lam*1E3 # change units to nm
     
     if spectra_type == 'global':
-        Isun = read_spectrafile(lam,'AM15_Global.txt', True)[0]
+        Isun = read_spectrafile(lam,'AM15_Global.txt', True)
     elif spectra_type == 'direct':
-        Isun = read_spectrafile(lam,'AM15_Direct.txt', True)[0]
+        Isun = read_spectrafile(lam,'AM15_Direct.txt', True)
     
     # keep only positive values
-    if not np.isscalar(Isun):
-       Isun[Isun<0]=0
+    Isun = _np.clip(Isun, 0, None)
     
     return Isun*1E3  # spectra in W/m2 um
 
 def T_atmosphere(lam):
     '''
-    IR Transmissivity of atmosphere taken from:
+    Spectral transmissivity of the atmosphere for an horizontal surface 
+    at normal incidence. Data taken from:
         IR Transmission Spectra, Gemini Observatory Kernel Description. 
         http://www.gemini.edu/?q/node/10789, accessed Sep 27, 2018.
 
@@ -117,13 +118,81 @@ def T_atmosphere(lam):
 
     '''
     # interpolate values according to lam spectra
-    T_atm =  read_spectrafile(lam,'T_atmosphere.txt', True)[0]
+    T_atm =  read_spectrafile(lam,'T_atmosphere.txt', True)
     
     # keep only positive values
-    if not np.isscalar(T_atm):
-        T_atm[T_atm<0]=0
-    
+    T_atm = _np.clip(T_atm, 0, None)
+
     return T_atm
+
+def T_atmosphere_hemi(lam, beta_tilt=0):
+    """
+    Computes the hemispherical atmospheric transmittance spectrum over a surface tilted at a given angle.
+    This function integrates the directional atmospheric transmittance over a hemisphere centered 
+    on a surface tilted by `beta_tilt` degrees. It accounts for the angular dependence of 
+    radiative path length through the atmosphere, assuming unity transmittance at grazing angles 
+    (zenith > 90°).
+
+    Parameters
+    ----------
+    lam : 1D ndarray
+        Wavelengths in micrometers [μm].
+    beta_tilt : float, optional
+        Tilt angle of the surface in degrees with respect to the vertical (default is 0°).
+
+    Returns
+    -------
+    T_hemi : 1D ndarray
+        Hemispherical atmospheric transmittance spectrum corresponding to each wavelength in `lam`.
+
+    Notes
+    -----
+    - The integration is performed over solid angles using a weighted cosine projection.
+    - Transmittance is assumed to be 1 for zenith angles greater than 90°, consistent with
+      complete atmospheric opacity at grazing incidence.
+    - The output is shifted to ensure minimum transmittance starts from 0 for normalization purposes.
+    """
+
+    beta = _np.radians(beta_tilt)
+
+    # Angular grid
+    theta_i = _np.linspace(0, _np.pi, 30)
+    phi_i = _np.linspace(0, 2 * _np.pi, 30)
+    tt, pp = _np.meshgrid(theta_i, phi_i, indexing='ij')  # shape: (T, P)
+
+    theta, phi = _local_to_global_angles(tt, pp, beta, phi_tilt=0)  # shape: (T, P)
+
+    # Compute angular weights
+    weight = _np.cos(tt) * _np.sin(tt)  # shape: (T, P)
+
+    # Flatten angles
+    theta_flat = theta.ravel()  # shape: (N,)
+    weight_flat = weight.ravel()  # shape: (N,)
+
+    # Transmission mask
+    mask = theta_flat < _np.pi / 2
+    cos_theta = _np.cos(theta_flat[mask])  # shape: (M,)
+
+    # T_atmosphere for all wavelengths
+    T_vec = T_atmosphere(lam)[:, None]  # shape: (L,1)
+
+    # Compute directional emissivity: (L, N)
+    trans = _np.ones((len(lam), len(theta_flat)))  # shape: (L, N)
+    trans[:, mask] = T_vec**(1 / cos_theta)  # broadcasting over wavelengths
+
+    # Integrate over angles
+    integrand = trans * weight_flat  # shape: (L, N)
+    dphi = phi_i[1] - phi_i[0]
+    dtheta = theta_i[1] - theta_i[0]
+
+    # Sum over all angles
+    T_hemi = _np.sum(integrand, axis=1) * dphi * dtheta / _np.pi # shape: (L,)
+
+    # Adjust to enssure 0 < T < 1
+    T_hemi = T_hemi - _np.min(T_hemi)
+    T_hemi = T_hemi/max(_np.max(T_hemi), 1.0)
+
+    return T_hemi
     
 def Bplanck(lam,T, unit = 'wavelength'):
     '''
@@ -149,10 +218,10 @@ def Bplanck(lam,T, unit = 'wavelength'):
     '''
     
     # define constants
-    c0 = em.speed_of_light     # m/s (speed of light)
-    hbar = em.hbar          # eV*s (reduced planks constant)
-    h = 2*np.pi*hbar           # J*s (planks constant)
-    kB = em.kBoltzmann      # eV/K (Boltzmann constant)
+    c0 = _em.speed_of_light     # m/s (speed of light)
+    hbar = _em.hbar          # eV*s (reduced planks constant)
+    h = 2*_np.pi*hbar           # J*s (planks constant)
+    kB = _em.kBoltzmann      # eV/K (Boltzmann constant)
     
     #-------------------------------------------------------------------------
     # Plank distribution in W/m^2-m-sr
@@ -161,7 +230,7 @@ def Bplanck(lam,T, unit = 'wavelength'):
         ll = lam*1E-6 # change wavelength units to m
         
         # compute planks distribbution
-        Ibb = 2*h*c0**2./ll**5*1/(np.exp(h*c0/(ll*T*kB)) - 1)*1E-6
+        Ibb = 2*h*c0**2./ll**5*1/(_np.exp(h*c0/(ll*T*kB)) - 1)*1E-6
     
     #-------------------------------------------------------------------------
     # Plank distribution in W/m^2-Hz-sr
@@ -171,7 +240,7 @@ def Bplanck(lam,T, unit = 'wavelength'):
         
         # compute planks distribbution
         Ibb = 2*h*vv**3/c0**2*          \
-              1/(np.exp(h*vv/(kB*T)) - 1)
+              1/(_np.exp(h*vv/(kB*T)) - 1)
     
     return Ibb
 
@@ -192,10 +261,9 @@ def yCIE_lum(lam):
     # interpolate values according to lam spectra
     lam = lam*1E3 # change units to nm
     
-    yCIE = read_spectrafile(lam,'CIE_lum.txt', True)[0]
+    yCIE = read_spectrafile(lam,'CIE_lum.txt', True)
     
     # keep only positive values
-    if not np.isscalar(yCIE):
-       yCIE[yCIE<0]=0
+    yCIE = _np.clip(yCIE, 0, None)
     
     return yCIE

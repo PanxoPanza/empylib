@@ -8,8 +8,8 @@ Created on Sun Nov  7 17:25:53 2021
 """
 import os
 import platform
-import numpy as np 
-import pandas as pd
+import numpy as _np 
+import pandas as _pd
 from scipy.integrate import quad
 from warnings import warn
 from typing import Callable # used to check callable variables
@@ -74,7 +74,6 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
 
     # if N.real or N.imag < 0, make it = 0
     N[N.real<0] = 0                + 1j*N[N.real<0].imag # real part = 0 (keep imag part)
-    N[N.imag<0] = N[N.imag<0].real + 1j*0                # imag part = 0 (keep real part)
     
     # warning if extrapolated values
     if lam[ 0] < nk_df.index[0] :
@@ -142,11 +141,12 @@ def get_ri_info(lam,shelf,book,page):
     matLambda = nk_df['wavelength'].to_numpy()
     mat_nk = nk_df['n'].to_numpy() + 1j*nk_df['k'].to_numpy()
 
-    # db = ri.DataBase()
-    # mat = db.materials[shelf][book][page]
-    # matLambda = np.array(mat.material_data["wavelengths"])
-    # matN = np.array(mat.material_data["index"])
+    # interpolate based on "lam"
     N = np.interp(lam, matLambda, mat_nk)
+    
+    # CHeck data and adjust
+    N[N.real<0]    = 0                + 1j*N[N.real<0].imag # real part = 0 (keep imag part)
+    # N = _fix_nk_anomalous(lam, N.real, N.imag)
     
     # warning if extrapolated values
     if lam[ 0] < matLambda[ 0] :
@@ -161,6 +161,95 @@ def get_ri_info(lam,shelf,book,page):
                     dielectric constant models
     --------------------------------------------------------------------
 '''
+def _split_by_max(arr, threshold):
+    """
+    Identify and group the indices of elements in the array that are greater than a given threshold.
+    Each group contains consecutive indices where the condition is satisfied.
+
+    Parameters:
+    ----------
+    arr : list or array-like
+        The input array to be analyzed.
+    threshold : int or float
+        The threshold value; only elements greater than this value are considered.
+
+    Returns:
+    -------
+    list of lists
+        A list containing sublists, each with consecutive indices where arr[index] > threshold.
+    """
+    # Step 1: Find indices where values > 10
+    indices = np.where(np.array(arr) > threshold)[0]
+
+    # Step 2: Group consecutive indices
+    index_list = []
+    idx = [indices[0]]
+
+    for i in range(1, len(indices)):
+        if indices[i] == indices[i-1] + 1:
+            idx.append(indices[i])
+        else:
+            index_list.append(idx)
+            idx = [indices[i]]
+    index_list.append(idx)  # Append the last group
+    return index_list
+
+def _fix_nk_anomalous(lam, n, k):
+    '''
+    PENDING
+    Analyze nk to fix anomalous behaviors. In the case of n, it just makes 
+    n = 0 if n < 0. For k, analyze beer-lambert transmittance of a 1 um film. 
+    Adjust k that fall T_bl > T_threshold to a very low value
+
+    Parameters
+    ------------
+    lam: ndarray
+        Wavelength of tabulated data
+    n, k: ndarray
+        Tabulated n and k
+
+    Return
+    -------
+
+    fixed n and k
+
+    '''
+    #---------------------------------------------------------------------
+    #                               Fix n 
+    #---------------------------------------------------------------------   
+    n_new = n.copy()
+    n_new[n<0] = 0 + 1j*k[n<0] # real part = 0 (keep imag part)
+
+    #---------------------------------------------------------------------
+    #                               Fix k 
+    #---------------------------------------------------------------------
+    d = 1                                     # Film test thickness (um)
+    T_threst = 0.996                          # Transmittance threshold
+    a_coef = 4*np.pi*k/lam                    # Absorption coefficient of film (1/um)
+    T_bl = np.exp(-a_coef*d)                  # Get Beer-Lambert transmittance
+    idx_list = _split_by_max(T_bl, T_threst)  # Find index that pass threshold
+
+    k_new = k.copy()
+    for idx in idx_list:
+
+        # Adjust k values to a linear regression with very large slope
+        slope = 20                            # slope of the curve
+        x0, y0 = np.log(lam[idx[0] ]), np.log(k[idx[0]])
+        b_dw = y0 + slope*x0                  # find y-intersept of downward curve
+
+        x0, y0 = np.log(lam[idx[-1] ]), np.log(k[idx[-1]])
+        b_up = y0 - slope*x0                  # find y-intersept of upward curve
+
+        # find intersection between the two curves
+        x_intersect = np.exp((b_dw - b_up)/(2*slope)) 
+        idx_cut = np.where(lam < x_intersect)[0][-1]  # index of intersection
+
+        # create new k values with linear curves
+        k_new[idx[0]:idx_cut]  = np.exp(b_dw - slope*np.log(lam[idx[0]:idx_cut]))
+        k_new[idx_cut:idx[-1]] = np.exp(b_up + slope*np.log(lam[idx_cut:idx[-1]]))
+
+    return n_new + 1j*k_new
+
 def eps_lorentz(A,gamma,E0,lam):
     '''
     Lorentz oscillator model for dielectric constant based on
@@ -512,11 +601,18 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
 
 #------------------------------------------------------------------------------
 #                                   Inorganic
-# refractive index of SiO2
-SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013', get_from_local_path = True)[0]
+# refractive index of SiO2 (quartz)
+# SiO2 = lambda lam: get_nkfile(lam, 'sio2_Palik_Lemarchand2013', get_from_local_path = True)[0]
+SiO2 = lambda lam: get_ri_info(lam, 'main', 'SiO2', 'Franta-25C')[0]
+
+# refractive index of Fused silica
+Silica = lambda lam: get_ri_info(lam, 'main', 'SiO2', 'Franta')[0]
 
 # refractive index of CaCO3
 CaCO3 = lambda lam: get_nkfile(lam, 'CaCO3_Palik', get_from_local_path = True)[0]
+
+# refractive index of BaSO4
+BaSO4 = lambda lam: get_nkfile(lam, 'BaSO4_Tong2022', get_from_local_path = True)[0]
 
 # refractive index of BaF2
 BaF2 = lambda lam: get_ri_info(lam, 'main', 'BaF2', 'Querry')[0]
