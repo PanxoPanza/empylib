@@ -60,7 +60,7 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     assert file_path.exists(), 'File not found'
     
     # read data as dataframe
-    nk_df = pd.read_csv(file_path, comment='#', sep='\s+', header=None, index_col=0)
+    nk_df = _pd.read_csv(file_path, comment='#', sep='\s+', header=None, index_col=0)
     
     # check if has n and k data
     assert nk_df.shape[1] == 2, 'wrong file format'
@@ -70,7 +70,7 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     nk_df.index.name = 'lambda'
 
     # create complex refractive index using interpolation form nkfile
-    N = np.interp(lam, nk_df.index, nk_df['n'] + 1j*nk_df['k'])
+    N = _np.interp(lam, nk_df.index, nk_df['n'] + 1j*nk_df['k'])
 
     # if N.real or N.imag < 0, make it = 0
     N[N.real<0] = 0                + 1j*N[N.real<0].imag # real part = 0 (keep imag part)
@@ -103,7 +103,7 @@ def read_nk_yaml_from_ri_info(url):
     nk_text = yaml_data['DATA'][0]['data']
 
     # Read into DataFrame using regex-based separator
-    nk_df = pd.read_csv(StringIO(nk_text), sep=r'\s+', names=['wavelength', 'n', 'k'])
+    nk_df = _pd.read_csv(StringIO(nk_text), sep=r'\s+', names=['wavelength', 'n', 'k'])
 
     return nk_df
 
@@ -142,7 +142,7 @@ def get_ri_info(lam,shelf,book,page):
     mat_nk = nk_df['n'].to_numpy() + 1j*nk_df['k'].to_numpy()
 
     # interpolate based on "lam"
-    N = np.interp(lam, matLambda, mat_nk)
+    N = _np.interp(lam, matLambda, mat_nk)
     
     # CHeck data and adjust
     N[N.real<0]    = 0                + 1j*N[N.real<0].imag # real part = 0 (keep imag part)
@@ -179,7 +179,7 @@ def _split_by_max(arr, threshold):
         A list containing sublists, each with consecutive indices where arr[index] > threshold.
     """
     # Step 1: Find indices where values > 10
-    indices = np.where(np.array(arr) > threshold)[0]
+    indices = _np.where(_np.array(arr) > threshold)[0]
 
     # Step 2: Group consecutive indices
     index_list = []
@@ -225,8 +225,8 @@ def _fix_nk_anomalous(lam, n, k):
     #---------------------------------------------------------------------
     d = 1                                     # Film test thickness (um)
     T_threst = 0.996                          # Transmittance threshold
-    a_coef = 4*np.pi*k/lam                    # Absorption coefficient of film (1/um)
-    T_bl = np.exp(-a_coef*d)                  # Get Beer-Lambert transmittance
+    a_coef = 4*_np.pi*k/lam                    # Absorption coefficient of film (1/um)
+    T_bl = _np.exp(-a_coef*d)                  # Get Beer-Lambert transmittance
     idx_list = _split_by_max(T_bl, T_threst)  # Find index that pass threshold
 
     k_new = k.copy()
@@ -234,19 +234,19 @@ def _fix_nk_anomalous(lam, n, k):
 
         # Adjust k values to a linear regression with very large slope
         slope = 20                            # slope of the curve
-        x0, y0 = np.log(lam[idx[0] ]), np.log(k[idx[0]])
+        x0, y0 = _np.log(lam[idx[0] ]), _np.log(k[idx[0]])
         b_dw = y0 + slope*x0                  # find y-intersept of downward curve
 
-        x0, y0 = np.log(lam[idx[-1] ]), np.log(k[idx[-1]])
+        x0, y0 = _np.log(lam[idx[-1] ]), _np.log(k[idx[-1]])
         b_up = y0 - slope*x0                  # find y-intersept of upward curve
 
         # find intersection between the two curves
-        x_intersect = np.exp((b_dw - b_up)/(2*slope)) 
-        idx_cut = np.where(lam < x_intersect)[0][-1]  # index of intersection
+        x_intersect = _np.exp((b_dw - b_up)/(2*slope)) 
+        idx_cut = _np.where(lam < x_intersect)[0][-1]  # index of intersection
 
         # create new k values with linear curves
-        k_new[idx[0]:idx_cut]  = np.exp(b_dw - slope*np.log(lam[idx[0]:idx_cut]))
-        k_new[idx_cut:idx[-1]] = np.exp(b_up + slope*np.log(lam[idx_cut:idx[-1]]))
+        k_new[idx[0]:idx_cut]  = _np.exp(b_dw - slope*_np.log(lam[idx[0]:idx_cut]))
+        k_new[idx_cut:idx[-1]] = _np.exp(b_up + slope*_np.log(lam[idx_cut:idx[-1]]))
 
     return n_new + 1j*k_new
 
@@ -275,7 +275,7 @@ def eps_lorentz(A,gamma,E0,lam):
         Complex dielectric constant
     '''
 
-    wp = np.sqrt(A*gamma*E0)
+    wp = _np.sqrt(A*gamma*E0)
     return lorentz(0,wp,E0,gamma,lam)**2
 
 def eps_gaussian(A,Br,E0,lam):
@@ -305,9 +305,9 @@ def eps_gaussian(A,Br,E0,lam):
         Complex dielectric constant
     '''
     #  Gauss model as function of E (in eV)
-    f = 0.5/np.sqrt(np.log(2)) # scaling constant
-    eps_G = lambda E: A*np.exp(-(f*(E - E0)/Br)**2) \
-                    - A*np.exp(-(f*(E + E0)/Br)**2)
+    f = 0.5/_np.sqrt(_np.log(2)) # scaling constant
+    eps_G = lambda E: A*_np.exp(-(f*(E - E0)/Br)**2) \
+                    - A*_np.exp(-(f*(E + E0)/Br)**2)
 
     # get real and imaginary part of dielectric constant
     E = convert_units(lam,'um','eV')                               # lambda range in eV
@@ -363,11 +363,11 @@ def eps_tauc_lorentz(A,C,E0,Eg,lam):
     #           Opt. Express 24, 28561-28572 (2016)
     # a = 0.09
     # b = E + 1j*a
-    # d = np.sqrt(E0**2 - (C/2)**2) - 1j*C/2
-    # F = lambda x,y,z: ((Eg + x)**2*np.log(Eg + x) - (Eg - x)**2*np.log(Eg - x))/ \
+    # d = _np.sqrt(E0**2 - (C/2)**2) - 1j*C/2
+    # F = lambda x,y,z: ((Eg + x)**2*_np.log(Eg + x) - (Eg - x)**2*_np.log(Eg - x))/ \
     #                     x*(x**2 - y**2)*(x**2 - z**2)
 
-    # eps = 1 + A*E0*C/np.pi*(F(b,d,d.conjugate())) + F(d,d.conjugate(),b) + F(d.conjugate(),b,d)
+    # eps = 1 + A*E0*C/_np.pi*(F(b,d,d.conjugate())) + F(d,d.conjugate(),b) + F(d.conjugate(),b,d)
     #------------------------------------------------------------------------------
 
     return eps_re + 1j*eps_im
@@ -401,7 +401,7 @@ def eps_ellipsometry(oscilator_file, lam):
         Complex dielectric constant
     '''
     
-    ellip_data = pd.read_csv(oscilator_file)
+    ellip_data = _pd.read_csv(oscilator_file)
     eps = complex(0,0)
     for idx, oscillator in ellip_data.iterrows():
         model, A, E0, C, Eg, Br, gamma = oscillator
@@ -431,7 +431,7 @@ def lorentz(epsinf,wp,wn,gamma,lam):
         Natural frequency in eV
     gamma : float
         Decay rate in eV
-    lam : linear np.array
+    lam : linear _np.array
         wavelength spectrum in um
 
     Returns
@@ -442,7 +442,7 @@ def lorentz(epsinf,wp,wn,gamma,lam):
     from .utils import convert_units
     w = convert_units(lam,'um','eV')  # conver from um to eV 
     
-    return np.sqrt(epsinf + wp**2/(wn**2 - w**2 - 1j*gamma*w))
+    return _np.sqrt(epsinf + wp**2/(wn**2 - w**2 - 1j*gamma*w))
 
 
 def drude(epsinf,wp,gamma,lam):
@@ -457,7 +457,7 @@ def drude(epsinf,wp,gamma,lam):
         Plasma frequency, in eV (wp^2 = Nq^2/eps0 m).
     gamma : float
         Decay rate in eV
-    lam : linear np.array
+    lam : linear _np.array
         wavelength spectrum in um
 
     Returns
@@ -470,9 +470,9 @@ def drude(epsinf,wp,gamma,lam):
     hbar = 1.0545718E-34          # J*s (plank's constan)
     
     
-    w = 2*np.pi*3E14/lam*hbar/eV  # conver from um to eV 
+    w = 2*_np.pi*3E14/lam*hbar/eV  # conver from um to eV 
     
-    return np.sqrt(epsinf - wp**2/(w**2 + 1j*gamma*w))
+    return _np.sqrt(epsinf - wp**2/(w**2 + 1j*gamma*w))
 
 def emt_brugg(fv_1,nk_1,nk_2):
     '''
@@ -511,11 +511,11 @@ def emt_brugg(fv_1,nk_1,nk_2):
 
     # eps_1 is scalar, create a constant array of len(eps_2)
     if   eps_1_isscalar and not eps_2_isscalar:
-        eps_1 = eps_1*np.ones_like(eps_2)
+        eps_1 = eps_1*_np.ones_like(eps_2)
         
     # eps_2 is scalar, create a constant array of len(eps_1)
     elif not eps_1_isscalar and eps_2_isscalar:
-        eps_2 = eps_2*np.ones_like(eps_1)
+        eps_2 = eps_2*_np.ones_like(eps_1)
     
     # both are ndarrays, assert they have same length
     else:
@@ -523,19 +523,19 @@ def emt_brugg(fv_1,nk_1,nk_2):
 
     # compute effective dielectric constant ussing Bruggerman theory.
     eps_m = 1/4.*((3*fv_1 - 1)*eps_1 + (3*fv_2 - 1)*eps_2                           \
-            - np.sqrt(((3*fv_1 - 1)*eps_1 + (3*fv_2 - 1)*eps_2)**2 + 8*eps_1*eps_2))
+            - _np.sqrt(((3*fv_1 - 1)*eps_1 + (3*fv_2 - 1)*eps_2)**2 + 8*eps_1*eps_2))
     
     for i in range(len(eps_m)):
         if eps_m[i].imag < 0  or (eps_m[i].imag < 1E-10 and eps_m[i].real < 0):
             eps_m[i] =  eps_m[i] + \
-                1/2*np.sqrt(((3*fv_1 - 1)*eps_1[i] + (3*fv_2 - 1)*eps_2[i])**2 \
+                1/2*_np.sqrt(((3*fv_1 - 1)*eps_1[i] + (3*fv_2 - 1)*eps_2[i])**2 \
                 + 8*eps_1[i]*eps_2[i]) 
     
     # if eps_1 and eps_2 were scalar, return a single scalar value
-    if len(eps_m) == 1: return np.sqrt(eps_m[0])
-    else :              return np.sqrt(eps_m)
+    if len(eps_m) == 1: return _np.sqrt(eps_m[0])
+    else :              return _np.sqrt(eps_m)
 
-def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-12):
+def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, _np.inf), cshift=1e-12):
     '''
     Computes real part of dielectric constant from its imaginary components 
     using Krammers-Kronig relation
@@ -562,8 +562,6 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
     eps_real: ndarray or float
               real part of dielectric constant
     '''
-    from .utils import convert_units
-
     lam, lam_isfloat = _ndarray_check(lam)
     cshift = complex(0, cshift)
     w_i = convert_units(lam,'um', 'eV')
@@ -575,20 +573,20 @@ def eps_real_kkr(lam, eps_imag, eps_inf = 0, int_range = (0, np.inf), cshift=1e-
             real_int = lambda w: (eps_imag(w) * factor(w)).real
             imag_int = lambda w: (eps_imag(w) * factor(w)).imag
             total = quad(real_int, a,b)[0] + 1j*quad(imag_int, a,b)[0]
-            return eps_inf + (2/np.pi)*total
+            return eps_inf + (2/_np.pi)*total
         
-    elif isinstance(eps_imag, np.ndarray) or isinstance(eps_imag,float):
+    elif isinstance(eps_imag, _np.ndarray) or isinstance(eps_imag,float):
         eps_imag = _ndarray_check(eps_imag)[0]
         assert lam.shape == eps_imag.shape, 'input arrays must be same length'
     
         def integration_element(w_r):
             factor = - w_i / (w_i**2 - w_r**2 + cshift) # integration domains are swaped, so a "-"" sign is added
-            total = np.trapz(eps_imag * factor, x=w_i)
-            return eps_inf + (2/np.pi)*total
+            total = _np.trapz(eps_imag * factor, x=w_i)
+            return eps_inf + (2/_np.pi)*total
     else:
         raise TypeError('Unknown type for eps_imag')
     
-    eps_real = np.real([integration_element(w_r) for w_r in w_i]).reshape(-1)
+    eps_real = _np.real([integration_element(w_r) for w_r in w_i]).reshape(-1)
     
     if lam.shape == (1,):
         return float(eps_real[0])
@@ -682,13 +680,13 @@ def VO2(lam,T, film=2 , Tphc = 73, WT = 3.1):
     Tphc = Tphc + 273   # convert °C to K
     T = T + 273         # convert °C to K
     
-    fv = 1/(1 + np.exp(WT/kB*(1/T - 1/Tphc)))
+    fv = 1/(1 + _np.exp(WT/kB*(1/T - 1/Tphc)))
     eps_c = VO2M(lam,film)**2
     eps_h = VO2R(lam,film)**2
     
     eps = (1 - fv)*eps_c + fv*eps_h
     
-    return np.sqrt(eps)
+    return _np.sqrt(eps)
 
 # refractive index of Silicon
 Si   = lambda lam: get_nkfile(lam, 'si_Schinke2017', get_from_local_path = True)[0]
