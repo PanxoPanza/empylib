@@ -446,11 +446,15 @@ def scatter_efficiency(lam,N_host,Np_shells,D,nmax=None):
     x = np.tensordot(kh,R,axes=0)   # size parameter
     m = m.transpose()
     
-    get_cross_section = np.vectorize(_cross_section_at_lam, 
-                                signature = '(n),(n),() -> (),(),(),(),()')
+    # Preallocate outputs
+    Qext = np.zeros_like(lam, dtype=float)
+    Qsca = np.zeros_like(lam, dtype=float)
+    gcos = np.zeros_like(lam, dtype=float)
+    for i in range(len(lam)):
+        Qext[i], Qsca[i], gcos[i], *_ = _cross_section_at_lam(m[i, :], x[i, :], nmax)
         
     # outputs: qext, qsca, gcos
-    return get_cross_section(m, x, nmax)[:3] 
+    return Qext, Qsca, gcos
     
 def scatter_coeffients(lam,N_host,Np_shells,D, nmax = None):
     
@@ -504,11 +508,12 @@ def scatter_coeffients(lam,N_host,Np_shells,D, nmax = None):
         # define nmax according to B.R Johnson (1996)
         nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
 
-    get_coefficients = np.vectorize(_get_coated_coefficients,
-                signature = '(n), (n), () -> (m), (m), (m), (m), (m), (m)')
-
-    # outputs an and bn
-    an, bn = get_coefficients(m, x, nmax)[:2]
+    # Preallocate outputs
+    an = np.zeros((len(lam), nmax), dtype=complex)
+    bn = np.zeros((len(lam), nmax), dtype=complex)
+    for i in range(len(lam)):
+        an[i,:], bn[i, :], *_ = _get_coated_coefficients(m[i, :], x[i, :], nmax)
+    
     return an.reshape(-1, nmax), bn.reshape(-1, nmax)
 
 def _pi_tau_1n(theta, nmax):
