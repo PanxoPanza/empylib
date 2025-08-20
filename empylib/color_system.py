@@ -4,198 +4,142 @@
 This library contains the class ColorSystem that converts a spectra into RGB colors
 Created on Wed 17 Aug, 2022
 
-ref: https://scipython.com/blog/converting-a-spectrum-to-a-colour/
-
 @author: PanxoPanza
 """
 
-import os
 import numpy as np
-import platform
+import colour as clr
+from typing import Sequence, Tuple
 
-def xyz_from_xy(x, y):
-    """Return the vector (x, y, 1-x-y)."""
-    return np.array((x, y, 1-x-y))
-
-class ColorSystem:
-    """A class representing a color system.
-
-    A color system defined by the CIE x, y and z=1-x-y coordinates of
-    its three primary illuminants and its "white point".
-
-    TODO: Implement gamma correction
-
+def spectrum_to_hex(
+    wls_um: Sequence[float],
+    R: Sequence[float],
+    illuminant_name: str = "D65",
+    observer_name: str = "CIE 1931 2 Degree Standard Observer",
+    interval_nm: float = 1.0,
+) -> Tuple[str, Tuple[float, float, float], Tuple[int, int, int]]:
     """
-    # Configure directory path
-    dir_separator = '\\' # default value
-    if platform.system() == "Linux":        # linux
-        dir_separator= '/'
+    Convert a reflectance/transmittance spectrum to an sRGB color (HEX + RGB), using proper CIE colorimetry.
 
-    elif platform.system() == 'Darwin':     # OS X
-        dir_separator='/'
+    Parameters
+    ----------
+    wls_um: ndarray, shape (N,)
+        1D wavelengths in micrometers (μm). They will be sorted ascending and converted to nm.
+    R: ndarray, shape (N,)
+        1D *reflectance* values in [0..1], same length as wls_um. If values fall outside [0..1],
+        they are clipped (fluorescent samples break this assumption and are not supported here).
+    illuminant_name : str
+        Name of the illuminant to use for the integration (e.g., "D65", "A", "F11").
+        Must exist in `colour.SDS_ILLUMINANTS`.
+    observer_name :  str
+        Standard observer to use (e.g., "CIE 1931 2 Degree Standard Observer",
+        "CIE 1964 10 Degree Standard Observer"). Must exist in `colour.MSDS_CMFS`.
+    interval_nm: float
+        Resampling step for the common spectral grid. 1 nm is typical; use ≤ 5 nm for accuracy.
 
-    elif platform.system() == "Windows":    # Windows...
-        dir_separator='\\'
+    Returns
+    -------
+    hex_color : str
+        HEX string like '#6096ff'.
+    rgb01 : 3D tuple
+        Tuple of sRGB components as floats in [0, 1].
+    rgb255 : 3D tuple
+        Tuple of sRGB components as integers in [0, 255].
 
-    # The CIE color matching function for 380 - 780 nm in 5 nm intervals
-    file_name = 'spectra_data' + dir_separator + 'cie-cmf.txt'
-    dir_path = os.path.dirname(__file__) + dir_separator
-    lam_cmf = np.loadtxt(dir_path+file_name, usecols=(0)) # wavelength spectrum
-    cmf = np.loadtxt(dir_path+file_name, usecols=(1,2,3)) # x, y, z  CIE colour matching functions
+    Notes
+    -----
+    - This computes XYZ by integrating R(λ) * I(λ) * CMF(λ) over the **common** wavelength range
+      of the sample, illuminant, and CMFs, then converts XYZ → sRGB with the proper OETF
+      (gamma/transfer function).
+    - Chromatic adaptation: `colour.XYZ_to_RGB(..., colourspace="sRGB", illuminant=xy_in, 
+      chromatic_adaptation_transform="CAT02")` adapts from the input-XYZ illuminant to sRGB's D65.
+      If your input illuminant is already D65, this is effectively identity.
+    - Do not extrapolate Illuminants or CMFs; wavelengths outside the overlap are ignored.
+    """
 
-    def __init__(self, red, green, blue, white):
-        """Initialise the colorSystem object.
+    # ---------- 0) Validate & prepare inputs --------------------------------
+    wls_um = np.asarray(wls_um, dtype=float).ravel()
+    R = np.asarray(R, dtype=float).ravel()
 
-        Pass vectors (ie NumPy arrays of shape (3,)) for each of the
-        red, green, blue  chromaticities and the white illuminant
-        defining the color system.
+    if wls_um.size != R.size:
+        raise ValueError("wls_um and R must have the same length.")
 
-        """
+    if np.any(~np.isfinite(wls_um)) or np.any(~np.isfinite(R)):
+        raise ValueError("wls_um and R must be finite numbers (no NaN/Inf).")
 
-        # Chromaticities
-        self.red, self.green, self.blue = red, green, blue
-        self.white = white
-        
-        # The chromaticity matrix (rgb -> xyz) and its inverse
-        self.M = np.vstack((self.red, self.green, self.blue)).T 
-        self.MI = np.linalg.inv(self.M)
-        
-        # White scaling array
-        self.wscale = self.MI.dot(self.white)
-        
-        # xyz -> rgb transformation matrix
-        self.T = self.MI / self.wscale[:, np.newaxis]
-        
-    def interp_internals(self,lam):
-        '''
-        Update internal cmf and lam spectra
+    if interval_nm <= 0:
+        raise ValueError("interval_nm must be > 0.")
 
-        Parameters
-        ----------
-        lam : ndarray
-            wavelength spectrum in microns.
+    # Enforce [0, 1] reflectance range (non-fluorescent assumption).
+    R = np.clip(R, 0.0, 1.0)
 
-        Returns
-        -------
-        None.
+    # Ensure wavelengths are strictly ascending; sort if needed.
+    sort_idx = np.argsort(wls_um)
+    wls_um = wls_um[sort_idx]
+    R = R[sort_idx]
 
-        '''
-        lam = lam*1E3
-        cmf_local = np.zeros((len(lam),3))
-        cmf_local[:,0] = np.interp(lam,self.lam_cmf,self.cmf[:,0])
-        cmf_local[:,1] = np.interp(lam,self.lam_cmf,self.cmf[:,1]) 
-        cmf_local[:,2] = np.interp(lam,self.lam_cmf,self.cmf[:,2])
-        self.lam_cmf = np.copy(lam)
-        self.cmf = np.copy(cmf_local)
-        
+    # Convert μm → nm for colour-science spectral objects.
+    wls_nm = wls_um * 1000.0
 
-    def xyz_to_rgb(self, xyz, out_fmt=None):
-        """Transform from xyz to rgb representation of color.
+    # ---------- 1) Build spectral objects -----------------------------------
+    # Sample reflectance as a SpectralDistribution.
+    # (If you have duplicate wavelengths, last one wins in dict; avoid duplicates upstream.)
+    sd_R = clr.SpectralDistribution(dict(zip(wls_nm, R)), name="sample")
 
-        The output rgb components are normalized on their maximum
-        value. If xyz is out the rgb gamut, it is desaturated until it
-        comes into gamut.
+    # Illuminant (spectral power distribution) and CMFs (cone sensitivities).
+    try:
+        sd_Ill = clr.SDS_ILLUMINANTS[illuminant_name]
+    except KeyError as e:
+        raise KeyError(f"Unknown illuminant '{illuminant_name}'.") from e
 
-        By default, fractional rgb components are returned; if
-        out_fmt='html', the HTML hex string '#rrggbb' is returned.
+    try:
+        cmfs = clr.MSDS_CMFS[observer_name]
+    except KeyError as e:
+        raise KeyError(f"Unknown observer '{observer_name}'.") from e
 
-        """
-        rgb = self.T.dot(xyz)
-        if np.any(rgb < 0):
-            # We're not in the RGB gamut: approximate by desaturating
-            w = - np.min(rgb)
-            rgb += w
-        if not np.all(rgb==0):
-            # Normalize the rgb vector
-            rgb /= np.max(rgb)
+    # ---------- 2) Make a common spectral grid (intersection) ---------------
+    # We only integrate over wavelengths where *all three* are defined.
+    start = max(sd_R.shape.start, sd_Ill.shape.start, cmfs.shape.start)
+    end   = min(sd_R.shape.end,   sd_Ill.shape.end,   cmfs.shape.end)
+    if not (end > start):
+        raise ValueError(
+            "No spectral overlap between sample, illuminant, and CMFs "
+            f"(sample: {sd_R.shape}, illum: {sd_Ill.shape}, cmfs: {cmfs.shape})."
+        )
 
-        if out_fmt == 'html':
-            return self.rgb_to_hex(rgb)
-        return rgb
+    shape = clr.SpectralShape(start, end, interval_nm)
 
-    def rgb_to_hex(self, rgb):
-        """Convert from fractional rgb values to HTML-style hex string."""
+    # Interpolate (to fill each nm) and align (ensure grids match exactly)
+    sd_R   = sd_R.copy().interpolate(shape).align(shape)
+    sd_Ill = sd_Ill.copy().interpolate(shape).align(shape)
+    cmfs   = cmfs.copy().interpolate(shape).align(shape)
 
-        hex_rgb = (255 * rgb).astype(int)
-        return '#{:02x}{:02x}{:02x}'.format(*hex_rgb)
+    # ---------- 3) Spectrum → XYZ under the chosen illuminant/observer ------
+    # sd_to_XYZ returns Y=100 for a perfect diffuser under the given illuminant.
+    XYZ = clr.sd_to_XYZ(sd_R, cmfs=cmfs, illuminant=sd_Ill)  # shape (3,)
+    # Normalise to 0..1 range for RGB conversion (Colour expects XYZ relative to 1.0)
+    XYZ_n = XYZ / 100.0
 
-    def spec_to_xyz(self, spec, lam=None):
-        '''
-        Convert a spectrum to an xyz point.
+    # ---------- 4) XYZ (input illuminant) → sRGB (D65) ----------------------
+    # sRGB colourspace object (contains whitepoint, matrices, transfer functions).
+    srgb = clr.RGB_COLOURSPACES["sRGB"]
 
-        Parameters
-        ----------
-        spec : ndarray
-            spectral radianse.
-            
-        lam : ndarray, optional
-            wavelength scpectrum in microns. The default is None. Size of lam
-            must be equal to the size of spec
+    # xy chromaticity *of the input XYZ* (i.e., the illuminant used for integration).
+    # This tells Colour what to adapt *from*; it adapts to sRGB's white (D65) by default.
+    xy_in = clr.CCS_ILLUMINANTS[observer_name][illuminant_name]
 
-        Returns
-        -------
-        ndarray
-            xyz color code.
+    rgb = clr.XYZ_to_RGB(
+        XYZ_n,
+        srgb,                                  # Target colourspace
+        illuminant=xy_in,                      # Input XYZ illuminant (xy)
+        chromatic_adaptation_transform="CAT02",# Adapt from input → D65
+        apply_cctf_encoding=True,              # Apply sRGB OETF (gamma)
+    )
 
-        '''
-        # set wavelength range
-        if lam is None: 
-            lam = self.lam_cmf
-            cmf_local = np.copy(self.cmf)
-        else: 
-            lam = lam*1E3
-            cmf_local = np.zeros((len(lam),3))
-            cmf_local[:,0] = np.interp(lam,self.lam_cmf,self.cmf[:,0])
-            cmf_local[:,1] = np.interp(lam,self.lam_cmf,self.cmf[:,1]) 
-            cmf_local[:,2] = np.interp(lam,self.lam_cmf,self.cmf[:,2])
-        
-        assert len(lam) == len(spec), 'size of lam and spec must be equal'
-        
-        #XYZ = np.sum(spec[:, np.newaxis] * self.cmf, axis=0)
-        XYZ = np.trapz(spec[:, np.newaxis] *cmf_local, x=lam, axis=0)
-        den = np.sum(XYZ)
-        if den == 0.:
-            return XYZ
-        return XYZ / den
+    # Keep inside displayable range; out-of-gamut values can occur.
+    rgb = np.clip(rgb, 0.0, 1.0)
 
-    def spec_to_rgb(self, spec, lam = None, out_fmt=None):
-        '''
-        Convert a spectrum to an rgb value.
-        
-        Parameters
-        ----------
-        spec : ndarray
-            spectral radiance, len(lam) == len(spec).
-            
-        lam : ndarray
-             wavelength range in micrometers. The default is None. size of lam
-             must be equal to the size of spec
-             
-        out_fmt : string, optional
-            out_html='html' if conevting to hex format. The default is None.
-
-        Returns
-        -------
-        ndarray
-            color RGB code.
-
-        '''
-        
-        xyz = self.spec_to_xyz(spec, lam)
-        return self.xyz_to_rgb(xyz, out_fmt)
-
-illuminant_D65 = xyz_from_xy(0.3127, 0.3291)
-hdtv = ColorSystem(red=xyz_from_xy(0.67, 0.33),
-                   green=xyz_from_xy(0.21, 0.71),
-                   blue=xyz_from_xy(0.15, 0.06),
-                   white=illuminant_D65)
-
-smpte = ColorSystem(red=xyz_from_xy(0.63, 0.34),
-                    green=xyz_from_xy(0.31, 0.595),
-                    blue=xyz_from_xy(0.155, 0.070),
-                    white=illuminant_D65)
-
-srgb = ColorSystem(red=xyz_from_xy(0.64, 0.33),
-                   green=xyz_from_xy(0.30, 0.60),
-                   blue=xyz_from_xy(0.15, 0.06),
-                   white=illuminant_D65)
+    # ---------- 5) Pack outputs ---------------------------------------------
+    rgb255 = (rgb * 255.0 + 0.5).astype(int)
+    hex_color = f"#{rgb255[0]:02x}{rgb255[1]:02x}{rgb255[2]:02x}"
+    return hex_color, (float(rgb[0]), float(rgb[1]), float(rgb[2])), (int(rgb255[0]), int(rgb255[1]), int(rgb255[2]))

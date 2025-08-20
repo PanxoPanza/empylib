@@ -33,7 +33,9 @@ setup(
         'scipy>=1.1.0',
         'pyyaml>=5.1',
         'requests>=2.18.0',
-        'iadpython'
+        'typing-extensions>=4.0',
+        'colour-science>=0.4.6',  # for color science utilities
+        'iadpython @ git+https://github.com/PanxoPanza/iadpython.git' # forked iadpython version
     ],
     packages=find_packages(include=[package_name, package_name + '.*']),
 )
