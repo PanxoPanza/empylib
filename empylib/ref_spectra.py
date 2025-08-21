@@ -194,55 +194,100 @@ def T_atmosphere_hemi(lam, beta_tilt=0):
 
     return T_hemi
     
-def Bplanck(lam,T, unit = 'wavelength'):
-    '''
-    Spectral Plank's black-body distribution
+import numpy as np
 
+def Bplanck(lam, T, unit='wavelength'):
+    """
+    Spectral Planck black-body distribution (radiance).
+    
     Parameters
     ----------
-    lam : narray
-        wavelength (um).
-        
-    T : float value
-        Temperature of the distribution (K).
-        
-    unit string, optional
-        units for integration. Options are:
-            "wavelength" spectral irradiance in wavelength units (microns)
-            "frequency" spectral irradiance in frequency units (hertz)
+    lam : array_like
+        Wavelength(s) in microns (um) if unit='wavelength';
+        still passed in microns when unit='frequency' (frequency computed from lam).
+    T : float
+        Temperature in K.
+    unit : {'wavelength','frequency'}
+        Output units:
+          - 'wavelength': W / (m^2 · um · sr)
+          - 'frequency' : W / (m^2 · Hz · sr)
 
     Returns
     -------
-    Ibb: ndarray
-         Spectral irradiance in W/m^2-um-sr (wavelength) W/m^2-Hz-sr (frequency)
-    '''
-    
-    # define constants
-    c0 = _em.speed_of_light     # m/s (speed of light)
-    hbar = _em.hbar          # eV*s (reduced planks constant)
-    h = 2*_np.pi*hbar           # J*s (planks constant)
-    kB = _em.kBoltzmann      # eV/K (Boltzmann constant)
-    
-    #-------------------------------------------------------------------------
-    # Plank distribution in W/m^2-m-sr
-    #-------------------------------------------------------------------------
-    if unit == 'wavelength': 
-        ll = lam*1E-6 # change wavelength units to m
-        
-        # compute planks distribbution
-        Ibb = 2*h*c0**2./ll**5*1/(_np.exp(h*c0/(ll*T*kB)) - 1)*1E-6
-    
-    #-------------------------------------------------------------------------
-    # Plank distribution in W/m^2-Hz-sr
-    #-------------------------------------------------------------------------
-    elif unit == 'frequency':
-        vv = c0/lam*1E6      # convert wavelength to frequency (Hz)
-        
-        # compute planks distribbution
-        Ibb = 2*h*vv**3/c0**2*          \
-              1/(_np.exp(h*vv/(kB*T)) - 1)
-    
+    Ibb : ndarray
+        Spectral radiance in the units indicated above.
+    """
+    # --- constants (float64) ---
+    c0   = float(_em.speed_of_light)  # m/s
+    hbar = float(_em.hbar)            # J·s/rad
+    h    = 2.0*np.pi*hbar             # J·s
+    kB   = float(_em.kBoltzmann)      # J/K
+
+    lam = np.asarray(lam, dtype=np.float64)
+    T   = float(T)
+
+    # invalids (avoid divide-by-zero / negatives)
+    invalid = (T <= 0) | (lam <= 0)
+
+    # helper: stable 1/(exp(x)-1)
+    # - for small x: use 1/x - 1/2 + x/12  (from series)
+    # - for large x: use exp(-x)
+    # - otherwise:   1/expm1(x)
+    def inv_expm1(x):
+        x = np.asarray(x, dtype=np.float64)
+        out = np.empty_like(x)
+
+        # thresholds tuned for float64
+        small = 1e-6
+        large = 50.0    # well below ~709 overflow threshold
+
+        # small-x series
+        xs = x < small
+        if np.any(xs):
+            xs_val = x[xs]
+            out[xs] = (1.0/xs_val) - 0.5 + xs_val/12.0
+
+        # large-x: 1/(e^x - 1) ≈ e^{-x}
+        xl = x > large
+        if np.any(xl):
+            out[xl] = np.exp(-x[xl])
+
+        # mid range: safe to use expm1
+        xm = ~(xs | xl)
+        if np.any(xm):
+            out[xm] = 1.0/np.expm1(x[xm])
+
+        return out
+
+    with np.errstate(over='ignore', under='ignore', divide='ignore', invalid='ignore'):
+        if unit == 'wavelength':
+            # meters
+            ll = lam * 1e-6
+
+            x = (h*c0) / (ll * kB * T)                # dimensionless
+            denom = inv_expm1(x)                      # ≈ 1/(exp(x)-1), overflow-safe
+            pref  = (2.0*h*c0*c0) / (ll**5)           # W·m^-3·sr^-1
+            Ibb_m = pref * denom                      # W·m^-3·sr^-1
+            Ibb   = Ibb_m * 1e-6                      # → W·m^-2·um^-1·sr^-1
+
+        elif unit == 'frequency':
+            # frequency from lam (lam passed in microns)
+            ll = lam * 1e-6
+            vv = c0 / ll                               # Hz
+
+            x = (h*vv) / (kB*T)                        # dimensionless
+            denom = inv_expm1(x)                       # ≈ 1/(exp(x)-1), overflow-safe
+            pref  = (2.0*h * vv**3) / (c0*c0)          # W·m^-2·Hz^-1·sr^-1
+            Ibb   = pref * denom
+        else:
+            raise ValueError("unit must be 'wavelength' or 'frequency'")
+
+    # set invalids to nan (e.g., nonpositive T or lam)
+    if np.any(invalid):
+        Ibb = np.where(invalid, np.nan, Ibb)
+
     return Ibb
+
 
 def yCIE_lum(lam):
     '''
