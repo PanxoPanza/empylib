@@ -15,3 +15,4 @@ from .waveoptics import *
 from .rad_transfer import *
 from .scuffem import *
 from .color_system import *
+from .spectrometry import *
