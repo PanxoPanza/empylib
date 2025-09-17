@@ -312,3 +312,114 @@ def yCIE_lum(lam):
     yCIE = _np.clip(yCIE, 0, None)
     
     return yCIE
+
+import re
+import numpy as np
+
+def spectral_average(lam_um: np.ndarray,
+                           spec_prop: np.ndarray,
+                           *,
+                           spectrum: str = 'solar',
+                           T: float | None = None,
+                           bounds: tuple[float, float] | None = None) -> float:
+    """
+    Compute a spectrum-weighted mean of a spectral property over wavelength.
+
+    Parameters
+    ----------
+    lam_um : np.ndarray
+        Wavelengths in micrometers [um], shape (N,). Must be positive and finite.
+    spec_prop : np.ndarray
+        Spectral property sampled at `lam_um`, shape (N,). NaNs are allowed and will be masked.
+    spectrum : str, optional
+        Weighting spectrum selector:
+          - 'solar'         : AM1.5 Global (W / m^2 / um)
+          - 'solar:direct'  : AM1.5 Direct (W / m^2 / um)
+          - 'thermal'       : Planck distribution at temperature `T` if provided,
+                              else T = 300 K (W / m^2 / um / sr)
+                              
+    T : float or None, optional
+        Black-body temperature in Kelvin. Only used when `spectrum` is 'thermal'.
+        If None and `spectrum=='thermal'`, defaults to 300 K.
+    bounds : (float, float) or None, optional
+        Spectral interval [lam_min, lam_max] in micrometers to restrict the integration.
+        If None, the full `lam_um` range is used.
+
+    Returns
+    -------
+    float
+        Spectrum-weighted mean:
+            <prop> = ∫ prop(λ) w(λ) dλ / ∫ w(λ) dλ
+        integrated with the trapezoidal rule over the (optionally bounded) input grid.
+
+    Raises
+    ------
+    ValueError
+        If inputs are malformed or not enough valid samples remain after masking/bounds.
+
+    Notes
+    -----
+    - No resampling is performed; the input grid is used as-is.
+    - Arrays are internally sorted by wavelength if needed.
+    - Both numerator and denominator use the same validity mask.
+    """
+    lam_um = np.asarray(lam_um, dtype=float)
+    spec_prop   = np.asarray(spec_prop,   dtype=float)
+
+    # Basic checks
+    if lam_um.ndim != 1 or spec_prop.ndim != 1:
+        raise ValueError("`lam_um` and `spec_prop` must be 1D arrays.")
+    if lam_um.size != spec_prop.size:
+        raise ValueError("`lam_um` and `spec_prop` must have the same length.")
+    if not np.all(np.isfinite(lam_um)) or np.any(lam_um <= 0):
+        raise ValueError("`lam_um` must be positive and finite.")
+
+    # Sort grid if not strictly increasing
+    if not np.all(np.diff(lam_um) > 0):
+        order = np.argsort(lam_um)
+        lam_um = lam_um[order]
+        spec_prop   = spec_prop[order]
+
+    # Optional spectral bounds
+    if bounds is not None:
+        lam_min, lam_max = bounds
+        if not np.isfinite(lam_min) or not np.isfinite(lam_max) or lam_min >= lam_max:
+            raise ValueError("`bounds` must be (lam_min, lam_max) with lam_min < lam_max.")
+        in_rng = (lam_um >= lam_min) & (lam_um <= lam_max)
+        if not np.any(in_rng):
+            raise ValueError("No samples fall within `bounds`.")
+        lam_um = lam_um[in_rng]
+        spec_prop   = spec_prop[in_rng]
+
+    s = spectrum.strip().lower()
+
+    # Build weighting spectrum on the provided grid
+    if s == 'solar':
+        w = AM15(lam_um, spectra_type='global')
+    elif s in ('solar:direct', 'solar-direct', 'direct'):
+        w = AM15(lam_um, spectra_type='direct')
+    elif s in ('thermal', 'planck', 'blackbody'):
+        T_use = 300.0 if T is None else float(T)
+        if not np.isfinite(T_use) or T_use <= 0:
+            raise ValueError("Temperature `T` must be a positive finite value.")
+        w = Bplanck(lam_um, T=T_use, unit='wavelength')
+    else:
+        raise ValueError("`spectrum` must be 'solar', 'solar:direct', or 'thermal'.")
+
+    # Mask invalids: NaN property, NaN/negative/zero weights
+    mask = np.isfinite(spec_prop) & np.isfinite(w) & (w > 0)
+    if mask.sum() < 2:
+        raise ValueError("Not enough valid samples to integrate after masking/bounds.")
+
+    lam = lam_um[mask]
+    p   = spec_prop[mask]
+    ww  = w[mask]
+
+    # Weighted average over wavelength
+    num = np.trapz(p * ww, lam)
+    den = np.trapz(ww, lam)
+
+    if den == 0 or not np.isfinite(den):
+        raise ValueError("Weight integral is zero or invalid; check chosen spectrum and bounds.")
+
+    return float(num / den)
