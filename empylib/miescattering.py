@@ -7,6 +7,8 @@ Created on Mon Nov 22 23:38:11 2021
 import numpy as np
 from numpy import pi, exp, conj, imag, real, sqrt
 from scipy.special import jv, yv
+from .nklib import emt_brugg
+from .utils import _check_mie_inputs
 import pandas as pd
 
 def _log_RicattiBessel(x,nmax,nmx):
@@ -302,103 +304,6 @@ def _cross_section_at_lam(m,x,nmax = None):
 
     return Qext, Qsca, Asym, Qb, Qf
 
-def _check_mie_inputs(lam=None,N_host=None,Np_shells=None,D=None):
-    '''
-    Ckeck and organize mie inputs before running any simulations
-    
-    Parameters
-    ----------
-    lam : ndarray or float
-        wavelengtgh (microns)
-        
-    N_host : ndarray or float
-        Complex refractive index of host. If ndarray, its size must be equal to
-        len(lam)
-        
-    Np_shells : float, 1darray or list
-        Complex refractive index of each shell layer. The number of elements
-        must be equal to len(D). Options are:
-            float:   solid sphere and constant refractive index
-            1darray: solid sphere and spectral refractive index (length must match that of lam)
-            list:    multilayered sphere (with both constant or spectral refractive indexes)
-        
-    D : float or list
-        Outter diameter of each shell's layer (microns). Options are:
-            float: solid sphere
-            list:  multilayered sphere
-
-    Returns
-    -------
-    lam : 1darray
-        wavelength range
-
-    Nh : 1darray
-        refractive index of host 
-
-    Np : ndarray
-        refractive index of shell layers
-
-    D  : 1darray
-        Diameters of shell layers
-
-    '''
-    
-    # convert input variables to list
-    if lam is not None:
-        if np.isscalar(lam) : lam = np.array([lam,])
-
-    # Verify D is float or list
-    if D is not None:
-        #   1. solid sphere
-        if np.isscalar(D) : D = [D,]
-        #   2. multilayered sphere
-        else:
-            assert isinstance(D, list), 'diameter of shell layers must be on a list format'
-        
-        # convert list to ndarrays
-        D = np.array(D)
-
-    # Verify Np_shells is float, 1darray or list 
-    if Np_shells is not None:
-        #   1.solid sphere constant refractive index
-        if np.isscalar(Np_shells): 
-            Np_shells = [Np_shells,]
-        #   2.solid sphere spectral refractive index
-        elif isinstance(Np_shells, np.ndarray) and Np_shells.ndim ==1:
-            Np_shells = [Np_shells,]
-        #   3. multilayered sphere
-        else:
-            assert isinstance(Np_shells, list), 'refractive index of shell layers must be on a list format'
-    
-    # if multilayered sphere, check refractive index and D match in length
-    if Np_shells is not None and D is not None:
-        assert len(D) == len(Np_shells), 'number of layers in D and Np_shells must be the same'
-
-        # analize Np_shells and rearrange to ndarray if float
-        Np = []
-        for Ni in Np_shells:
-            if np.isscalar(Ni):            # convert to ndarray if float
-                Ni = np.ones(len(lam))*Ni
-            else: 
-                assert len(Ni) == len(lam), 'Np_layers must either float or size len(lam)'
-            Np.append(Ni.astype(complex))
-        Np = np.array(Np).reshape(len(D),len(lam))
-
-        # sort layers from inner to outer shell
-        idx = np.argsort(D)
-        D = D[idx]
-        Np_shells = Np[idx,:]
-
-    # analyze N_host and rearrange to ndarray if float
-    if N_host is not None and lam is not None:
-        if np.isscalar(N_host):             # convert to ndarray if float
-            N_host = np.ones(len(lam), dtype = complex)*N_host
-        else: 
-            assert len(N_host) == len(lam), 'N_host must either float or size len(lam)'
-            N_host = np.copy(N_host.astype(complex))
-
-    return lam, N_host, Np_shells, D 
-
 def scatter_efficiency(lam,N_host,Np_shells,D,nmax=None):
     
     '''
@@ -589,7 +494,7 @@ def scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax = None):
     """
     # convert input variables to array
     if np.isscalar(theta) : theta = np.array([theta,])
-    if np.isscalar(lam) : theta = np.array([lam,])
+    if np.isscalar(lam) : lam = np.array([lam,])
 
     # Extract mie scattering coefficients
     an, bn = scatter_coeffients(lam,N_host,Np_shells,D, nmax)
@@ -703,7 +608,7 @@ def phase_scatt(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = False):
     _, Nh, _, D = _check_mie_inputs(lam = lam, N_host = N_host, D = D)
 
     # Scale factor
-    x = np.pi/lam*D[-1]/Nh.real
+    x = np.pi*Nh.real*D[-1]/lam
     scale_factor = np.pi*x**2
 
     # Compute phase function
@@ -764,14 +669,6 @@ def scatter_from_phase_function(phase_fun):
     
     Parameters
     ----------
-    D : float or list
-        Outter diameter of each shell's layer (microns). Options are:
-            float: solid sphere
-            list:  multilayered sphere
-
-    N_host (ndarray or float): Complex refractive index of host. If 
-                    ndarray, len = lam
-
     phase_fun : pd.DataFrame
         Phase function. Row index must be theta in degrees from 0 to over 180.
         Columns correspond to different wavelengths.
@@ -790,7 +687,6 @@ def scatter_from_phase_function(phase_fun):
     # Step 1: Sort index by angle
     phase_fun = phase_fun.sort_index()
     lam = phase_fun.columns.to_numpy()  # wavelength (um)
-    # x = np.pi/lam*D[-1]/Nh              # size parameter
 
     # Step 2: Subset to angles [0°, 180°]
     subset = phase_fun.loc[(phase_fun.index >= 0) & (phase_fun.index <= 180)]
@@ -815,6 +711,13 @@ def scatter_from_phase_function(phase_fun):
     # compute scattering efficiency and asymmetry parameter
     qsca = 2 * np.pi * np.trapz(p_theta, mu, axis=0)
     gcos = 2 * np.pi * np.trapz(mu*p_theta.T, mu, axis=1)/qsca
+
+    # sanitize NaNs/infs if any wavelength has vanishing scattering
+    mask_bad = ~np.isfinite(qsca) | (qsca <= 0)
+    if np.any(mask_bad):
+        gcos[mask_bad] = 0.0
+        qsca[mask_bad] = 0.0
+
     return qsca, gcos
 
 def _mono_percus_yevick(fv, q, D):
@@ -983,7 +886,8 @@ def structure_factor_PY(theta, lam, Nh, D, fv, nD=None):
     
     return S_q
 
-def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD = None, nmax = None, as_ndarray = False):
+def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD=None, *, 
+                      nmax=None, as_ndarray=False, effective_medium=False):
     """
     Calculate the scattering phase function for multiple hard-spheres under unpolarized light. 
     The intensity is normalized such that the integral is equal to qsca
@@ -991,51 +895,185 @@ def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD = None, nmax = None, as_
     Parameters:
         theta : ndarray or float
             Scattering angle (radians)
-
         lam : ndarray or float 
             Wavelengtgh (microns)
-        
         N_host : ndarray or float 
             Complex refractive index of host. If ndarray, len(N_host) == len(lam)
-        
         Np : float or ndarray
             Complex refractive index of the sphere. If ndarray, len(Np) == len(lam). 
-        
         D : float or np.ndarray
             Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
-        
         fv: float
             Filling fraction
-        
         nD: ndarray
-            Diameter density distribution. len(nD) == D
-
+            Diameter density distribution. len(nD) == len(D)
         nmax : int (optional)
             Number of mie scattering coefficients. Default None
-
         as_ndarray : bool (optional)
             True if user wants the output as ndarray. Otherwise, the output is a pd.DataFrame. 
             Default False
+        effective_medium : bool (optional)
+            If True, compute the effective refractive index of the host using Bruggeman EMT.
+            Default True
 
     Returns:
         phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
     """
-    
+    # Input checks
+    if nD is not None:
+        if not isinstance(D, np.ndarray):
+            raise ValueError("For polydisperse case, D must be a numpy array.")
+        if not isinstance(nD, np.ndarray):
+            raise ValueError("nD must be a numpy array if provided.")
+        if D.shape != nD.shape:
+            raise ValueError("D and nD must have the same shape.")
+        if np.any(nD < 0):
+            raise ValueError("nD must be non-negative.")
+        if not np.isclose(np.sum(nD), 1, atol=1e-2):
+            nD = nD / np.sum(nD)  # Normalize if not already
+    if not isinstance(effective_medium, bool):
+        raise ValueError("effective_medium must be a boolean value.")
+
+    if effective_medium:
+        # Compute effective refractive index of host using Bruggeman EMT
+        N_host = emt_brugg(fv, Np, N_host)
+
     # Get form factor
-    F_theta = phase_scatt(theta, lam, N_host, Np ,D, nmax, as_ndarray = True)
-    
+    if nD is None:
+        # Monodisperse
+        F_theta = phase_scatt(theta, lam, N_host, Np, D, nmax, as_ndarray=True)
+    else:
+        Ac = np.pi*(D/2)**2  # cross-sectional area of each diameter
+
+        # Polydisperse: ensemble average over diameter distribution
+        F_theta = np.zeros((len(theta), len(lam)), dtype=float)
+        for i, Di in enumerate(D):
+            # For each diameter, compute phase function
+            F_theta += nD[i] * Ac[i] * phase_scatt(theta, lam, N_host, Np, Di, nmax, as_ndarray=True)
+        
+        # Normalize by average cross-sectional area
+        F_theta /= np.sum(nD * Ac)
+
     # Get structure factor
     S_q = structure_factor_PY(theta, lam, N_host, D, fv, nD)
 
-    phase_fun = F_theta*S_q
+    phase_fun = F_theta * S_q
 
     # return phase function as ndarray
-    if as_ndarray: return phase_fun
+    if as_ndarray:
+        return phase_fun
 
     # if not convert phase function to dataframe
     df_phase_fun = pd.DataFrame(data=phase_fun, 
-                            index=np.degrees(theta), 
-                            columns=lam)
+                               index=np.degrees(theta), 
+                               columns=lam)
 
     return df_phase_fun
+
+def poly_sphere_cross_section(
+    lam, D_list, p_list, Np, Nh, fv, *,
+    n_theta: int = 361,             # dense angular grid for forward peaks
+    atol_prob: float = 1e-6,        # tolerance for sum(p)=1
+    effective_medium: bool = True, # whether to compute effective Nh via Bruggeman
+):
+    """
+    Compute size-averaged scattering/absorption cross sections and asymmetry parameter
+    for a polydisperse set of hard spheres under the independent-scattering assumption.
+    Not valid for metallic spheres or high volume fractions where near-field coupling
+    is important.
+
+    Parameters
+    ----------
+    lam : array-like, shape (nλ,)
+        Wavelengths [µm], strictly positive.
+    D_list : array-like, shape (nD,)
+        Particle diameters [µm], strictly positive.
+    p_list : array-like, shape (nD,)
+        Number-fraction probabilities for each diameter (Case A). Sum must be 1
+        within tolerance; will be renormalized if slightly off.
+    Np : float or array-like (nλ,)
+        Particle refractive index (can be complex). If array-like, length must equal len(lam).
+    Nh : float or array-like (nλ,)
+        Host refractive index (can be complex). If array-like, length must equal len(lam).
+    fv : float
+        Particle volume fraction in (0, 1). Used only to compute an effective medium Nh via
+        `nk.emt_brugg(fv, Np, Nh)`.
+    n_theta : int, optional
+        Number of polar angles for phase function integration (default: 361). Must be >= 5.
+    atol_prob : float, optional
+        Absolute tolerance for sum(p_list) to be considered 1 (default: 1e-6).
+    effective_medium : bool, optional
+        Whether to compute an effective host refractive index via Bruggeman EMT (default: True
+
+    Returns
+    -------
+    csca_av : np.ndarray, shape (nλ,)
+        Size-averaged scattering cross section per particle [µm²].
+    cabs_av : np.ndarray, shape (nλ,)
+        Size-averaged absorption cross section per particle [µm²].
+    g_av : np.ndarray, shape (nλ,)
+        Size-averaged asymmetry parameter (⟨cosθ⟩).
+    """
+    # ---------- Input sanitation ----------
+    D_list = np.atleast_1d(np.asarray(D_list, dtype=float))
+    p_list = np.atleast_1d(np.asarray(p_list, dtype=float))
+
+    if D_list.ndim != 1 or p_list.ndim != 1:
+        raise ValueError("D_list and p_list must be 1D arrays.")
+    if D_list.shape != p_list.shape:
+        raise ValueError(f"D_list and p_list must have the same length (got {len(D_list)} vs {len(p_list)}).")
+    if np.any(D_list <= 0):
+        raise ValueError("All diameters in D_list must be > 0.")
+    if not (0 <= fv < 1):
+        raise ValueError("fv (volume fraction) must be in [0, 1).")
+    if np.any(Np.real < 0) or np.any(Nh.real < 0):
+        raise ValueError("Refractive indices must have nonnegative real parts.")
+    if np.any(Np.real < Np.imag):
+        raise Warning("Method not valid for metallic particles")
+
+    sp = p_list.sum()
+    if not np.isfinite(sp) or sp <= 0:
+        raise ValueError("p_list must contain finite nonnegative values and sum to a positive number.")
+    if not np.isclose(sp, 1.0, atol=atol_prob):
+        p_list = p_list / sp  # soft-renormalize to 1
+
+    # ---------- Effective medium for host (if your convention is to dress Nh) ----------
+    if effective_medium:
+        if fv == 0:
+            Nh_eff = Nh
+        else:
+            Nh_eff = emt_brugg(fv, Np, Nh)  # complex array length nλ
+    else:
+        Nh_eff = Nh
+
+    # ---------- Precompute geometry ----------
+    Ac_list = np.pi * (D_list / 2.0) ** 2          # [µm²]
+    # V_list = (4.0/3.0) * np.pi * (D_list/2.0)**3 # [µm³]  # (unused here)
+
+    # ---------- Absorption: average q_abs * area ----------
+    cabs_av = np.zeros_like(lam, dtype=float)
+    for D, p, Ac in zip(D_list, p_list, Ac_list):
+        # mie.scatter_efficiency must return arrays shaped (nλ,)
+        qext, qsca, _ = scatter_efficiency(lam, Nh_eff, Np, D)
+        qabs = qext - qsca
+        # sanitize any tiny negative due to numerics
+        qabs = np.where(qabs < 0, 0.0, qabs)
+        cabs_av += p * qabs * Ac
+
+    # ---------- Scattering and g: via dense phase function integration ----------
+    # Angular grid (dense & includes endpoints)
+    n_theta = max(int(n_theta), 5)
+    theta = np.linspace(0.0, np.pi, n_theta)
+
+    # phase_scatt_dense should return a DataFrame with index=θ° and columns=λ (your earlier design)
+    phase_fun_df = phase_scatt_dense(theta, lam, Nh_eff, Np, D_list, fv, p_list)
+
+    # Compute Q_sca and g from differential efficiency
+    qsca_av, g_av = scatter_from_phase_function(phase_fun_df)
+
+    # Convert Q_sca (efficiency) to cross section via weighted area ⟨A⟩ = Σ p_i A_i
+    A_mean = float(np.sum(p_list * Ac_list))
+    csca_av = qsca_av * A_mean
+
+    return csca_av, cabs_av, g_av, phase_fun_df
 
