@@ -1,7 +1,8 @@
-from typing import Optional, List, Dict, Any, Iterable
+from typing import Optional, List, Dict, Any, Iterable, Tuple
 import csv, re
 import pandas as pd
 from pathlib import Path
+import re
 
 def _sniff_dialect(lines: List[str]):
     """
@@ -510,19 +511,125 @@ def read_uvvis(path: str,
 
     return df
 
-def sample_uvvis(sample: str,
+def find_uvvis_samples(
+    search_dirs: Optional[Iterable[str]] = None,
+    tags: Optional[List[str]] = None,
+    aliases: Optional[Dict[str, List[str]]] = None,
+    exts: Tuple[str, ...] = (".txt", ".asc"),
+) -> List[str]:
+    """
+    Find UV-Vis sample names by scanning files named <tag>_<sample><ext>.
+    - Case-insensitive for tags/aliases and extensions.
+    - Keeps the sample name exactly as it appears in filenames (after the first separator).
+    Parameters
+    ----------
+    search_dirs : Iterable[str], optional
+        List of directories to search for files.
+        If None, defaults to ["."], the current directory.
+    tags : List[str], optional
+        List of tags to look for in filenames.
+        If None, defaults to:
+        ["Rtot", "Ttot", "Rspec", "Tspec", "Rdif", "Tdif"].
+    aliases : Dict[str, List[str]], optional
+        Mapping of tag → list of alternative names to try.
+        If None, defaults to:
+        {
+            "Rtot": ["Rtot"],
+            "Ttot": ["Ttot"],
+            "Rspec": ["Rspec", "R_spec", "Rspecular"],
+            "Tspec": ["Tspec", "T_spec", "Tspecular"],
+            "Rdif": ["Rdif", "Rdiff", "Rdiffuse"],
+            "Tdif": ["Tdif", "Tdiff", "Tdiffuse"],
+        }.
+    exts : Tuple[str, ...], optional
+        Tuple of file extensions to consider (case-insensitive).
+        Defaults to (".txt", ".asc").
+    Returns
+    -------
+    List[str]
+        List of unique sample names found (order not guaranteed).
+    """
+    if search_dirs is None:
+        search_dirs = ["."]
+    if tags is None:
+        tags = ["Rtot", "Ttot", "Rspec", "Tspec", "Rdif", "Tdif"]
+    if aliases is None:
+        aliases = {
+            "Rtot": ["Rtot"],
+            "Ttot": ["Ttot"],
+            "Rspec": ["Rspec", "R_spec", "Rspecular"],
+            "Tspec": ["Tspec", "T_spec", "Tspecular"],
+            "Rdif": ["Rdif", "Rdiff", "Rdiffuse"],
+            "Tdif": ["Tdif", "Tdiff", "Tdiffuse"],
+        }
+
+    # Build a prefix-regex from all aliases (start of string, tag, then separators)
+    alias_flat = set()
+    for t in tags:
+        for a in aliases.get(t, [t]):
+            alias_flat.add(a)
+    # sort by length desc to avoid partial matches (e.g., 'T' before 'Ttot')
+    alias_sorted = sorted(alias_flat, key=len, reverse=True)
+    tag_re = re.compile(rf"^({'|'.join(re.escape(a) for a in alias_sorted)})[ _-]+", re.IGNORECASE)
+
+    samples: List[str] = []
+    for d in search_dirs:
+        base = Path(d)
+        if not base.exists():
+            continue
+        for p in base.iterdir():
+            if not p.is_file():
+                continue
+            if p.suffix.lower() not in {e.lower() for e in exts}:
+                continue
+            stem = p.stem
+            # remove '<tag><sep>' at start; keep the rest verbatim as the sample name
+            sample_name = tag_re.sub("", stem)
+            if sample_name and sample_name not in samples:
+                samples.append(sample_name)
+    return samples
+
+def sample_uvvis(sample: str = None,
                  search_dirs: Optional[Iterable[str]] = None,
                  tags: Optional[List[str]] = None,
-                 aliases: Optional[Dict[str, List[str]]] = None) -> pd.DataFrame:
+                 aliases: Optional[Dict[str, List[str]]] = None,
+                 exts: Tuple[str, ...] = (".txt", ".asc")) -> pd.DataFrame:
     """
     Aggregate UV-Vis measurements for a given sample into a single DataFrame.
     Also derives the third component per family (R*, T*) via: total = diffuse + specular.
-
+    
     Files searched (case-insensitive), by default:
       Rtot, Ttot, Rspec, Tspec, Rdif, Tdif
     Exact-name patterns per tag (sample kept exactly as passed):
       <tag>_<sample>.txt | <tag>_<sample>.asc
       <tag_lower>_<sample>.txt | <tag_lower>_<sample>.asc
+      
+    Parameters
+    ----------
+    sample : str, optional
+        Sample name to look for in filenames (e.g. "MySample").
+        If None, defaults to the sample files stored in "search_dirs".
+    search_dirs : Iterable[str], optional
+        List of directories to search for files.
+        If None, defaults to ["."], the current directory.
+    tags : List[str], optional
+        List of tags to look for in filenames.
+        If None, defaults to:
+        ["Rtot", "Ttot", "Rspec", "Tspec", "Rdif", "Tdif"].
+    aliases : Dict[str, List[str]], optional
+        Mapping of tag → list of alternative names to try.
+        If None, defaults to:
+        {
+            "Rtot": ["Rtot"],
+            "Ttot": ["Ttot"],
+            "Rspec": ["Rspec", "R_spec", "Rspecular"],
+            "Tspec": ["Tspec", "T_spec", "Tspecular"],
+            "Rdif": ["Rdif", "Rdiff", "Rdiffuse"],
+            "Tdif": ["Tdif", "Tdiff", "Tdiffuse"],
+        }.
+    exts : Tuple[str, ...], optional
+        Tuple of file extensions to consider (case-insensitive).
+        Defaults to (".txt", ".asc").
 
     Returns
     -------
@@ -538,6 +645,7 @@ def sample_uvvis(sample: str,
     - If exactly two of (tot, dif, spec) are present in a family, the third is
       computed using tot = dif + spec. If all three exist, nothing is computed.
     """
+    # Default to finding all samples if none specified
     if tags is None:
         tags = ["Rtot", "Ttot", "Rspec", "Tspec", "Rdif", "Tdif"]
     if search_dirs is None:
@@ -559,12 +667,9 @@ def sample_uvvis(sample: str,
             found_in_any_dir = False
             for d in search_dirs:
                 base = Path(d)
-                candidates = [
-                    f"{alias}_{sample}.txt",
-                    f"{alias}_{sample}.asc",
-                    f"{alias.lower()}_{sample}.txt",
-                    f"{alias.lower()}_{sample}.asc",
-                ]
+                candidates = [f"{a}_{sample}{ext}" 
+                              for a in (alias, alias.lower()) 
+                              for ext in exts]
                 path_found = None
                 for fname in candidates:
                     p = base / fname
@@ -614,3 +719,46 @@ def sample_uvvis(sample: str,
     out = out.apply(pd.to_numeric, errors="coerce").sort_index(axis=1)
 
     return out
+
+def linestyle(sample: pd.DataFrame,
+                linestyles: Dict = {"tot": "-", "spec": ":", "dif": "--"},
+                colors: Dict = {"R": "r", "T": "b", "A": "k"}) -> str:
+    """
+    Generate matplotlib line styles for UV-Vis DataFrame columns.
+    E.g. {"Rtot": "-r", "Tspec": ":b", "Rdif": "--r"}.
+    
+    Parameters
+    ----------
+    sample : pandas.DataFrame
+        DataFrame with columns named like Rtot, Tspec, Rdif, Atot, etc.
+    linestyles : Dict, optional
+        Mapping of line type keywords to matplotlib line styles.
+        Defaults to {"tot": "-", "spec": ":", "dif": "--"}.
+    colors : Dict, optional
+        Mapping of measurement type keywords to colors.
+        Defaults to {"R": "r", "T": "b", "A": "k"}.
+    
+    Returns
+    -------
+    Dict[str, str]
+        Dictionary mapping each column name to a matplotlib style string.
+        E.g. {"Rtot": "-r", "Tspec": ":b", "Rdif": "--r"}
+    
+    Notes
+    -----
+    - The function looks for keywords in column names to determine line style
+      and color. It is case-insensitive.
+    - If a column name does not match any known keywords, it defaults to
+      a solid black line ("-k").
+    """
+    
+    style = {}
+    # Case-insensitive matching
+    for col_name in sample.columns:
+        color = colors.get(col_name[0], "k")  # default black if not R/T
+        for key, ls in linestyles.items():
+            if col_name.lower().endswith(key):
+                style[col_name] = ls + color
+            else:
+                style[col_name] = "-" + color  # fallback: solid line
+    return style
