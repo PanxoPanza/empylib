@@ -4,12 +4,13 @@ Created on Mon Nov 22 23:38:11 2021
 
 @author: PanxoPanza
 """
-import numpy as np
+import numpy as _np
 from numpy import pi, exp, conj, imag, real, sqrt
 from scipy.special import jv, yv
 from .nklib import emt_brugg
 from .utils import _check_mie_inputs
 import pandas as pd
+from typing import Union as _Union, Optional as _Optional
 
 def _log_RicattiBessel(x,nmax,nmx):
     '''
@@ -39,38 +40,38 @@ def _log_RicattiBessel(x,nmax,nmx):
     '''
     
     # if x is scalar, transform variable to numpy array of dim 1
-    if np.isscalar(x): x = np.array([x])
+    if _np.isscalar(x): x = _np.array([x])
     
-    n = np.array(range(nmax))
+    n = _np.array(range(nmax))
     
     # Get Dn(x) by downwards recurrence
-    Dnx = np.zeros((len(x),nmx),dtype=np.complex128)
+    Dnx = _np.zeros((len(x),nmx),dtype=_np.complex128)
     for i in reversed(range(1, nmx)):
         # define D_(i+1) (x)
-        # if i == nmx-1 : Dip1 = np.zeros(len(x))
+        # if i == nmx-1 : Dip1 = _np.zeros(len(x))
         # else :          Dip1 = Dnx[:,i+1]
         
         Dnx[:,i-1] = (i+1)/x - 1/(Dnx[:,i] + (i+1)/x)
         
     # Get Gn(x) by upwards recurrence
-    Gnx = np.zeros((len(x),nmx),dtype=np.complex128)
-    G0x = 1j*np.ones_like(x)
+    Gnx = _np.zeros((len(x),nmx),dtype=_np.complex128)
+    G0x = 1j*_np.ones_like(x)
     i = 0
     Gnx[:,i] = 1/((i+1)/x - G0x) - (i+1)/x
     for i in range(1, nmx):
         # define G_(i-1) (x)
-        # if i == 0 : Gim1x = 1j*np.ones(len(x))
+        # if i == 0 : Gim1x = 1j*_np.ones(len(x))
         # else : Gim1x = Gnx[:,i-1] 
         
         Gnx[:,i] = 1/((i+1)/x - Gnx[:,i-1]) - (i+1)/x
     
     # Get Rn(x) by upwards recurrence
-    Rnx = np.zeros((len(x),len(n)),dtype=np.complex128) 
+    Rnx = _np.zeros((len(x),len(n)),dtype=_np.complex128) 
     for ix in range(len(x)):
         
         # note that 0.5*(1 - exp(-2j*x)) = 0 if x = pi*n
         # I added this clause for those cases
-        if imag(x[ix]) == 0 and np.mod(real(x[ix]),pi) == 0:
+        if imag(x[ix]) == 0 and _np.mod(real(x[ix]),pi) == 0:
             nu = (n + 1) + 0.5
             py =  sqrt(0.5*pi*x[ix])*jv(nu,x[ix])
             chy = sqrt(0.5*pi*x[ix])*yv(nu,x[ix])
@@ -91,8 +92,8 @@ def _log_RicattiBessel(x,nmax,nmx):
 def _recursive_ab(m, n, Dn, Gn, Rn, Dn1, Gn1, Rn1) :
     i = Dn.shape[0]
     if i == 0:
-        an = np.zeros(n)
-        bn = np.zeros(n)
+        an = _np.zeros(n)
+        bn = _np.zeros(n)
     else:
         # get an^i and bn^i
         (an, bn) = _recursive_ab(m[:i],n,
@@ -150,18 +151,18 @@ def _get_coated_coefficients(m,x, nmax=None):
 
     # define nmax according to B.R Johnson (1996)
     if nmax is None :
-        nmax = int(np.round(np.abs(ka) + 4*np.abs(ka)**(1/3) + 2))
+        nmax = int(_np.round(_np.abs(ka) + 4*_np.abs(ka)**(1/3) + 2))
     
     #----------------------------------------------------------------------
     #       Computing an and bn (main part of this code)
     #----------------------------------------------------------------------
     
     mix = m*x               # Ni*k*ri
-    mi1 = np.append(m,1)
+    mi1 = _np.append(m,1)
     mi1x = mi1[1:]*x        # Ni+1*k*ri
     
     # Computation of Dn(z), Gn(z) and Rn(z)
-    nmx = int(np.round(max(nmax, max(abs(m*x))) + 16))
+    nmx = int(_np.round(max(nmax, max(abs(m*x))) + 16))
     
     # Get Dn(mi*x), Gn(mi*x), Rn(mi*x) 
     Dn, Gn, Rn = _log_RicattiBessel(mix,nmax,nmx)
@@ -177,10 +178,10 @@ def _get_coated_coefficients(m,x, nmax=None):
     #       computing secondary paramters
     # ---------------------------------------------------------------------
     # Get Bessel-Ricatti functions and derivatives for last shell layer
-    n = np.array(range(1,nmax+1))
+    n = _np.array(range(1,nmax+1))
     nu = n+0.5
-    phi = np.sqrt(0.5*pi*ka)*jv(nu,ka) # phi(n,ka)
-    chi = np.sqrt(0.5*pi*ka)*yv(nu,ka) # chi(n,ka)
+    phi = _np.sqrt(0.5*pi*ka)*jv(nu,ka) # phi(n,ka)
+    chi = _np.sqrt(0.5*pi*ka)*yv(nu,ka) # chi(n,ka)
     xi  = phi + 1j*chi                    # xi(n,ka)
     
     return an.reshape(-1), bn.reshape(-1), phi, Dn1[-1,:].reshape(-1), xi, Gn1[-1,:].reshape(-1)
@@ -229,7 +230,7 @@ def _cross_section_at_lam(m,x,nmax = None):
 
     if nmax is None :
         # define nmax according to B.R Johnson (1996)
-        nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
+        nmax = int(_np.round(_np.abs(y) + 4*_np.abs(y)**(1/3) + 2))
 
     #------------------------------------------------------------------
     # Get mie coefficient and other parameters of interest
@@ -243,7 +244,7 @@ def _cross_section_at_lam(m,x,nmax = None):
         ft = 2
     
     # arranging pre-computing constants
-    n = np.array(range(1,nmax+1))
+    n = _np.array(range(1,nmax+1))
     
     #------------------------------------------------------------------
     # Extinction efficiency
@@ -254,23 +255,23 @@ def _cross_section_at_lam(m,x,nmax = None):
                        + an*xy*conj(py)*Gy               \
                        - bn*xy*conj(py)*conj(Dy))        \
                        /y)
-    q = np.sum(en)
+    q = _np.sum(en)
     Qext = real(1/real(y)*ft*q)    
     
     #------------------------------------------------------------------
     # Scattering efficiency
     #------------------------------------------------------------------
-    en = (2*n+1)*imag((+ np.abs(an*xy)**2*Gy                \
-                       - np.abs(bn*xy)**2*conj(Gy)         \
+    en = (2*n+1)*imag((+ _np.abs(an*xy)**2*Gy                \
+                       - _np.abs(bn*xy)**2*conj(Gy)         \
                        )/y)
-    q = np.sum(en)
+    q = _np.sum(en)
     Qsca = real(1/real(y)*ft*q)
     
     #------------------------------------------------------------------
     # Asymmetry parameter
     #------------------------------------------------------------------
-    anp1 = np.zeros(nmax,dtype=np.complex128)
-    bnp1 = np.zeros(nmax,dtype=np.complex128)
+    anp1 = _np.zeros(nmax,dtype=_np.complex128)
+    bnp1 = _np.zeros(nmax,dtype=_np.complex128)
     anp1[:nmax-1] = an[1:] # a(n+1) coefficient
     bnp1[:nmax-1] = bn[1:] # a(n+1) coefficient
     
@@ -278,20 +279,20 @@ def _cross_section_at_lam(m,x,nmax = None):
          + (2*n + 1)/(n*(n + 1))*real(an*conj(bn))
     
     asy2 = (2*n+1)*(an*conj(an) + bn*conj(bn))
-    Asym = real(2*np.sum(asy1)/np.sum(asy2))
+    Asym = real(2*_np.sum(asy1)/_np.sum(asy2))
     
     #------------------------------------------------------------------
     # Backward scattering (not valid for absorbing host media)
     #------------------------------------------------------------------
     f = (2*n+1)*(-1)**n*(an - bn)
-    q = np.sum(f)
+    q = _np.sum(f)
     Qb = real(q*conj(q)/y**2)
     
     #------------------------------------------------------------------
     # Forward scattering (not valid for absorbing host media)
     #------------------------------------------------------------------
     f = (2*n+1)*(an + bn)
-    q = np.sum(f)
+    q = _np.sum(f)
     Qf = real(q*conj(q)/y**2)
     
     #------------------------------------------------------------------
@@ -304,8 +305,14 @@ def _cross_section_at_lam(m,x,nmax = None):
 
     return Qext, Qsca, Asym, Qb, Qf
 
-def scatter_efficiency(lam,N_host,Np_shells,D,nmax=None):
-    
+def scatter_efficiency(lam: _Union[float, _np.ndarray],
+                       N_host: _Union[float, _np.ndarray],
+                       Np_shells: _Union[float, _np.ndarray],
+                       D: _Union[float, _np.ndarray],
+                       nmax: int = None,
+                       check_inputs: bool = True
+                       ):
+
     '''
     Compute mie scattering parameters for multi-shell spherical particle.
 
@@ -343,25 +350,31 @@ def scatter_efficiency(lam,N_host,Np_shells,D,nmax=None):
         Asymmetry parameter
     '''
     # first check inputs and arrange them in np arrays
-    lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
+    if check_inputs:
+        lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
 
     m = Np/Nh.real                  # sphere layers
     R = D/2                         # particle's inner radius
     kh = 2*pi*Nh.real/lam           # wavector in the host
-    x = np.tensordot(kh,R,axes=0)   # size parameter
+    x = _np.tensordot(kh,R,axes=0)   # size parameter
     m = m.transpose()
     
     # Preallocate outputs
-    Qext = np.zeros_like(lam, dtype=float)
-    Qsca = np.zeros_like(lam, dtype=float)
-    gcos = np.zeros_like(lam, dtype=float)
+    Qext = _np.zeros_like(lam, dtype=float)
+    Qsca = _np.zeros_like(lam, dtype=float)
+    gcos = _np.zeros_like(lam, dtype=float)
     for i in range(len(lam)):
         Qext[i], Qsca[i], gcos[i], *_ = _cross_section_at_lam(m[i, :], x[i, :], nmax)
         
     # outputs: qext, qsca, gcos
     return Qext, Qsca, gcos
     
-def scatter_coeffients(lam,N_host,Np_shells,D, nmax = None):
+def scatter_coeffients(lam:_Union[float, _np.ndarray],
+                       N_host:_Union[float, _np.ndarray],
+                       Np_shells:_Union[float, _np.ndarray],
+                       D:_Union[float, _np.ndarray],
+                       nmax: int = None,
+                       check_inputs: bool = True):
     
     '''
     Compute mie scattering coefficients an and bn for multi-shell spherical 
@@ -399,23 +412,24 @@ def scatter_coeffients(lam,N_host,Np_shells,D, nmax = None):
         Scattering coefficient N function
     '''
     # first check inputs and arrange them in np arrays
-    lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
+    if check_inputs:
+        lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
     
     m = Np/Nh                       # sphere layers
     R = D/2                         # particle's inner radius
     kh = 2*pi*Nh/lam                # wavector in the host
-    x = np.tensordot(kh,R,axes=0)   # size parameter
+    x = _np.tensordot(kh,R,axes=0)   # size parameter
     m = m.transpose()
 
     # determine nmax 
     if nmax is None :
         y = max(x[-1,:]) # largest size parameter of outer layer
         # define nmax according to B.R Johnson (1996)
-        nmax = int(np.round(np.abs(y) + 4*np.abs(y)**(1/3) + 2))
+        nmax = int(_np.round(_np.abs(y) + 4*_np.abs(y)**(1/3) + 2))
 
     # Preallocate outputs
-    an = np.zeros((len(lam), nmax), dtype=complex)
-    bn = np.zeros((len(lam), nmax), dtype=complex)
+    an = _np.zeros((len(lam), nmax), dtype=complex)
+    bn = _np.zeros((len(lam), nmax), dtype=complex)
     for i in range(len(lam)):
         an[i,:], bn[i, :], *_ = _get_coated_coefficients(m[i, :], x[i, :], nmax)
     
@@ -438,13 +452,13 @@ def _pi_tau_1n(theta, nmax):
         ndarray: π_1n(θ) = P_n^1(cos𝜃) / sin𝜃.
         ndarray: τ_1n(θ) = d/d𝜃 P_n^1(cos𝜃).
     """
-    mu = np.cos(theta)  # x = cos(θ)
+    mu = _np.cos(theta)  # x = cos(θ)
 
-    pi  = np.zeros((nmax, len(mu)))
-    tau = np.zeros((nmax, len(mu)))
+    pi  = _np.zeros((nmax, len(mu)))
+    tau = _np.zeros((nmax, len(mu)))
     
     pi_nm2 = 0
-    pi[0] = np.ones_like(mu)
+    pi[0] = _np.ones_like(mu)
     
     for n in range(1, nmax):
         tau[n - 1] =            n * mu * pi[n - 1] - (n + 1) * pi_nm2
@@ -454,7 +468,13 @@ def _pi_tau_1n(theta, nmax):
         
     return pi, tau
 
-def scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax = None):
+def scatter_amplitude(theta: _Union[float, _np.ndarray], 
+                      lam: _Union[float, _np.ndarray], 
+                      N_host: _Union[float, _np.ndarray], 
+                      Np_shells: _Union[float, _np.ndarray], 
+                      D: _Union[float, _np.ndarray], 
+                      nmax: int = None,
+                      check_inputs: bool = True):
     """
     Calculate the elements S1 (S11) and S2 (S22) of the scattering matrix for spheres.
     * For spheres S12 = S21 = 0
@@ -492,33 +512,42 @@ def scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax = None):
     Returns:
         S1, S2: the scattering amplitudes at each angle mu [sr**(-0.5)]
     """
+    # first check inputs and arrange them in np arrays
+    if check_inputs:
+        lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
+    
     # convert input variables to array
-    if np.isscalar(theta) : theta = np.array([theta,])
-    if np.isscalar(lam) : lam = np.array([lam,])
+    if _np.isscalar(theta) : theta = _np.array([theta,])
 
     # Extract mie scattering coefficients
-    an, bn = scatter_coeffients(lam,N_host,Np_shells,D, nmax)
+    an, bn = scatter_coeffients(lam,N_host,Np_shells,D, nmax, check_inputs=False)
     nmax = an.shape[1]
 
     # get pi and tau angular functions
     pi, tau = _pi_tau_1n(theta, nmax)
 
-    # set scale for sumation
-    n = np.arange(1, nmax + 1)
+    # set scale for summation
+    n = _np.arange(1, nmax + 1)
     scale = (2 * n + 1) / ((n + 1) * n)
 
-    mu = np.cos(theta)
+    mu = _np.cos(theta)
 
     # compute S1 and S2
-    S1 = np.zeros((len(mu), len(lam)), dtype=np.complex128)
-    S2 = np.zeros((len(mu), len(lam)), dtype=np.complex128)
+    S1 = _np.zeros((len(mu), len(lam)), dtype=_np.complex128)
+    S2 = _np.zeros((len(mu), len(lam)), dtype=_np.complex128)
     for k in range(len(mu)):
-        S1[k] = np.dot(scale* pi[:,k],an.T) + np.dot(scale*tau[:,k],bn.T)
-        S2[k] = np.dot(scale*tau[:,k],an.T) + np.dot(scale* pi[:,k],bn.T)
+        S1[k] = _np.dot(scale* pi[:,k],an.T) + _np.dot(scale*tau[:,k],bn.T)
+        S2[k] = _np.dot(scale*tau[:,k],an.T) + _np.dot(scale* pi[:,k],bn.T)
 
     return S1, S2
 
-def scatter_stokes(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = False):
+def scatter_stokes(theta: _Union[float, _np.ndarray], 
+                   lam: _Union[float, _np.ndarray], 
+                   N_host: _Union[float, _np.ndarray], 
+                   Np_shells: _Union[float, _np.ndarray], 
+                   D: _Union[float, _np.ndarray], 
+                   nmax: int = None,
+                   check_inputs: bool = True):
     """
     Calculate the Stokes parameters S11, S12, S33 and S34 of a sphere. 
 
@@ -550,21 +579,33 @@ def scatter_stokes(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = Fals
     Returns:
         phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
     """
-    # Get scattering amplitude elements S1 and S2
-    s1, s2 = scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax)
 
     # Organize D format
-    _, Nh, _, D = _check_mie_inputs(lam = lam, N_host = N_host, D = D)
+    if check_inputs:
+        lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
+    
+    # convert input variables to array
+    if _np.isscalar(theta) : theta = _np.array([theta,])
+    
+    # Get scattering amplitude elements S1 and S2
+    s1, s2 = scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax, check_inputs = False)
 
     # Compute stokes parameters
-    S11 =1/2*(np.abs(s1)**2 + np.abs(s2)**2)
-    S12 =1/2*(np.abs(s1)**2 - np.abs(s2)**2)
+    S11 =1/2*(_np.abs(s1)**2 + _np.abs(s2)**2)
+    S12 =1/2*(_np.abs(s1)**2 - _np.abs(s2)**2)
     S33 =1/2*(s2.conj()*s1 + s2*s1.conj())
     S34 =1*2*(s2.conj()*s1 - s2*s1.conj())
 
     return S11, S12, S33, S34
 
-def phase_scatt(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = False):
+def phase_scatt(theta: _Union[float, _np.ndarray], 
+                   lam: _Union[float, _np.ndarray], 
+                   N_host: _Union[float, _np.ndarray], 
+                   Np_shells: _Union[float, _np.ndarray], 
+                   D: _Union[float, _np.ndarray], 
+                   nmax: int = None, 
+                   as_ndarray: bool = False,
+                   check_inputs: bool = True):
     """
     Calculate the scattering phase function. The intensity is normalized 
     such that the integral is equal to qsca
@@ -601,25 +642,29 @@ def phase_scatt(theta, lam,N_host,Np_shells,D, nmax = None, as_ndarray = False):
     Returns:
         phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
     """
-    # Get scattering amplitude elements S1 and S2
-    s1, s2 = scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax)
-
     # Organize D format
-    _, Nh, _, D = _check_mie_inputs(lam = lam, N_host = N_host, D = D)
+    if check_inputs:
+        lam, Nh, Np, D = _check_mie_inputs(lam,N_host,Np_shells,D)
+    
+    # convert input variables to array
+    if _np.isscalar(theta) : theta = _np.array([theta,])
+    
+    # Get scattering amplitude elements S1 and S2
+    s1, s2 = scatter_amplitude(theta, lam,N_host,Np_shells,D, nmax, check_inputs = False)
 
     # Scale factor
-    x = np.pi*Nh.real*D[-1]/lam
-    scale_factor = np.pi*x**2
+    x = _np.pi*Nh.real*D[-1]/lam
+    scale_factor = _np.pi*x**2
 
     # Compute phase function
-    phase_fun = 1/scale_factor*(np.abs(s1)**2 + np.abs(s2)**2)/2
+    phase_fun = 1/scale_factor*(_np.abs(s1)**2 + _np.abs(s2)**2)/2
 
     # return phase function as ndarray
     if as_ndarray: return phase_fun
 
     # if not convert phase function to dataframe
     df_phase_fun = pd.DataFrame(data=phase_fun, 
-                            index=np.degrees(theta), 
+                            index=_np.degrees(theta), 
                             columns=lam)
 
     return df_phase_fun
@@ -641,14 +686,14 @@ def phase_scatt_HG(theta, lam, gcos, qsca = 1, as_ndarray = False):
         p_theta_HG: float or ndarray
             Phase function
     """
-    if np.isscalar(theta): theta = np.array([theta])
-    if np.isscalar(gcos): theta = np.array([gcos])
-    if not np.isscalar(qsca) and (len(qsca) != len(gcos)): 
+    if _np.isscalar(theta): theta = _np.array([theta])
+    if _np.isscalar(gcos): theta = _np.array([gcos])
+    if not _np.isscalar(qsca) and (len(qsca) != len(gcos)): 
         raise ValueError("qsca and gcos must be of same size.")
 
-    gg, tt = np.meshgrid(gcos, theta)
+    gg, tt = _np.meshgrid(gcos, theta)
 
-    p_theta_HG = 1/(4*np.pi)*(1 - gg**2)/(1 + gg**2 - 2*gg*np.cos(tt))**(3/2)
+    p_theta_HG = 1/(4*_np.pi)*(1 - gg**2)/(1 + gg**2 - 2*gg*_np.cos(tt))**(3/2)
 
     p_theta_HG = qsca*p_theta_HG
 
@@ -657,7 +702,7 @@ def phase_scatt_HG(theta, lam, gcos, qsca = 1, as_ndarray = False):
 
     # if not convert phase function to dataframe
     df_phase_fun = pd.DataFrame(data=p_theta_HG, 
-                            index=np.degrees(theta), 
+                            index=_np.degrees(theta), 
                             columns=lam)
 
     return df_phase_fun
@@ -696,25 +741,25 @@ def scatter_from_phase_function(phase_fun):
     if len(theta) < 2:
         raise ValueError("Not enough angle samples between 0 and 180 degrees.")
 
-    if not np.isclose(theta[0], 0, atol=3) or not np.isclose(theta[-1], 180, atol=3):
+    if not _np.isclose(theta[0], 0, atol=3) or not _np.isclose(theta[-1], 180, atol=3):
         raise ValueError("Selected theta range must span from 0 to 180 degrees.")
 
-    if not np.all(np.diff(theta) > 0):
+    if not _np.all(_np.diff(theta) > 0):
         raise ValueError("Theta values must be strictly increasing — no duplicates allowed.")
 
-    mu = np.cos(np.radians(theta))
+    mu = _np.cos(_np.radians(theta))
 
     # Sort phase function and mu in ascending order
-    p_theta = subset.values[np.argsort(mu)]
+    p_theta = subset.values[_np.argsort(mu)]
     mu.sort()
 
     # compute scattering efficiency and asymmetry parameter
-    qsca = 2 * np.pi * np.trapz(p_theta, mu, axis=0)
-    gcos = 2 * np.pi * np.trapz(mu*p_theta.T, mu, axis=1)/qsca
+    qsca = 2 * _np.pi * _np.trapz(p_theta, mu, axis=0)
+    gcos = 2 * _np.pi * _np.trapz(mu*p_theta.T, mu, axis=1)/qsca
 
     # sanitize NaNs/infs if any wavelength has vanishing scattering
-    mask_bad = ~np.isfinite(qsca) | (qsca <= 0)
-    if np.any(mask_bad):
+    mask_bad = ~_np.isfinite(qsca) | (qsca <= 0)
+    if _np.any(mask_bad):
         gcos[mask_bad] = 0.0
         qsca[mask_bad] = 0.0
 
@@ -755,11 +800,11 @@ def _mono_percus_yevick(fv, q, D):
     γ = 0.5 * fv * (1 + 2 * fv)**2 / (1 - fv)**4
 
     # G(A) from Eq. (21)
-    term1 = α / x**2 * (np.sin(x) - x * np.cos(x))
-    term2 = β / x**3 * (2 * x * np.sin(x) + (2 - x**2) * np.cos(x) - 2)
-    term3 = γ / x**5 * (-x**4 * np.cos(x) +
-                        4 * ((3 * x**2 - 6) * np.cos(x) +
-                                (x**3 - 6 * x) * np.sin(x) + 6))
+    term1 = α / x**2 * (_np.sin(x) - x * _np.cos(x))
+    term2 = β / x**3 * (2 * x * _np.sin(x) + (2 - x**2) * _np.cos(x) - 2)
+    term3 = γ / x**5 * (-x**4 * _np.cos(x) +
+                        4 * ((3 * x**2 - 6) * _np.cos(x) +
+                                (x**3 - 6 * x) * _np.sin(x) + 6))
     G_kt = term1 + term2 + term3
 
     # Structure factor from Eq. (20)
@@ -783,7 +828,7 @@ def _poly_percus_yevick(fv, qq, D, nD):
         Magnitude of the scattering vector.
     D : ndarray
         Diameter of the spheres
-    nD : np.ndarray or None
+    nD : _np.ndarray or None
         Probability distribution over D (same length as D). If None, assumes monodisperse.
 
     Returns:
@@ -791,7 +836,7 @@ def _poly_percus_yevick(fv, qq, D, nD):
     S_q : float
         Structure factor evaluated at q.
     """
-    if not isinstance(D, np.ndarray) or not isinstance(nD, np.ndarray):
+    if not isinstance(D, _np.ndarray) or not isinstance(nD, _np.ndarray):
         raise ValueError("D and nD must be numpy arrays in the polydisperse case.")
         
     if D.shape != nD.shape:
@@ -800,7 +845,7 @@ def _poly_percus_yevick(fv, qq, D, nD):
     R = D / 2
 
     # Weighted average over size distribution
-    average = lambda f: np.trapz(f * nD, R, axis = 1)  
+    average = lambda f: _np.trapz(f * nD, R, axis = 1)  
 
     # if fv > 0.5, compute structure factor for voids
     # "complementary PY hard-sphere approach"
@@ -808,9 +853,9 @@ def _poly_percus_yevick(fv, qq, D, nD):
         R = (1 - fv)/fv*R
         fv = 1 - fv
 
-    S_q = np.zeros_like(qq)
+    S_q = _np.zeros_like(qq)
     for i in range(qq.shape[0]):
-        q = np.meshgrid(R, qq[i,:])[1]
+        q = _np.meshgrid(R, qq[i,:])[1]
         
         x = q * R  # Scattering vector scaled by radius
         
@@ -818,16 +863,16 @@ def _poly_percus_yevick(fv, qq, D, nD):
         psi = 3 * fv / (1 - fv)
     
         # Trigonometric building blocks for structure factor (Botet et al., Eqs. 8–13)
-        Fcs = np.cos(x) + x * np.sin(x)  # cos(x) + x·sin(x)
-        Fsc = np.sin(x) - x * np.cos(x)  # sin(x) - x·cos(x)
+        Fcs = _np.cos(x) + x * _np.sin(x)  # cos(x) + x·sin(x)
+        Fsc = _np.sin(x) - x * _np.cos(x)  # sin(x) - x·cos(x)
     
         # Botet et al. expressions for b, c, d, e, f, g
         b = psi * average(Fcs * Fsc) / average(x**3)
         c = psi * average(Fsc**2) / average(x**3)
-        d = 1 + psi * average(x**2 * np.sin(x) * np.cos(x)) / average(x**3)
-        e = psi * average(x**2 * np.sin(x)**2) / average(x**3)
-        f = psi * average(x * np.sin(x) * Fsc) / average(x**3)
-        g = - psi * average(x * np.cos(x) * Fsc) / average(x**3)
+        d = 1 + psi * average(x**2 * _np.sin(x) * _np.cos(x)) / average(x**3)
+        e = psi * average(x**2 * _np.sin(x)**2) / average(x**3)
+        f = psi * average(x * _np.sin(x) * Fsc) / average(x**3)
+        g = - psi * average(x * _np.cos(x) * Fsc) / average(x**3)
         # print(c)
         
         # Auxiliary variables for S(q)
@@ -840,7 +885,13 @@ def _poly_percus_yevick(fv, qq, D, nD):
         
     return S_q
 
-def structure_factor_PY(theta, lam, Nh, D, fv, nD=None):
+def structure_factor_PY(theta: _Union[float, _np.ndarray], 
+                        lam: _Union[float, _np.ndarray], 
+                        Nh: _Union[float, _np.ndarray], 
+                        D: _Union[float, _np.ndarray], 
+                        fv: float, 
+                        nD: _np.ndarray = None, 
+                        check_inputs: bool = True):
     """
     Compute the Percus-Yevick structure factor S(q) for hard-sphere systems,
     for both monodisperse and polydisperse cases.
@@ -853,9 +904,9 @@ def structure_factor_PY(theta, lam, Nh, D, fv, nD=None):
         Wavelength range (um)
     Nh: float or ndarray
         Refractive index of host. If ndarray, len(Nh) == len(lam)
-    D : float or np.ndarray
+    D : float or _np.ndarray
         Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
-    nD : np.ndarray or None
+    nD : _np.ndarray or None
         Probability distribution over D (same length as D). If None, assumes monodisperse.
 
     Returns:
@@ -868,13 +919,14 @@ def structure_factor_PY(theta, lam, Nh, D, fv, nD=None):
     ValueError
         If inputs are inconsistent or invalid.
     """    
-    if isinstance(theta, float): theta = np.array([theta])
+    if isinstance(theta, float): theta = _np.array([theta])
     
-    lam, Nh, _, _ = _check_mie_inputs(lam, Nh)
+    if check_inputs:
+        lam, Nh, _, _ = _check_mie_inputs(lam, Nh)
     
     # compute scattering vector (q = 2k0*sin(theta/2))
-    k0 = 2*np.pi*Nh.real/lam
-    q = np.outer(2*k0, np.sin(theta/2))
+    k0 = 2*_np.pi*Nh.real/lam
+    q = _np.outer(2*k0, _np.sin(theta/2))
 
     q[q < 0.1] = 0.1  # Found overflow for q < 0.1
     
@@ -887,7 +939,7 @@ def structure_factor_PY(theta, lam, Nh, D, fv, nD=None):
     return S_q
 
 def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD=None, *, 
-                      nmax=None, as_ndarray=False, effective_medium=False):
+                      nmax=None, as_ndarray=False, effective_medium=True):
     """
     Calculate the scattering phase function for multiple hard-spheres under unpolarized light. 
     The intensity is normalized such that the integral is equal to qsca
@@ -901,7 +953,7 @@ def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD=None, *,
             Complex refractive index of host. If ndarray, len(N_host) == len(lam)
         Np : float or ndarray
             Complex refractive index of the sphere. If ndarray, len(Np) == len(lam). 
-        D : float or np.ndarray
+        D : float or _np.ndarray
             Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
         fv: float
             Filling fraction
@@ -921,16 +973,16 @@ def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD=None, *,
     """
     # Input checks
     if nD is not None:
-        if not isinstance(D, np.ndarray):
+        if not isinstance(D, _np.ndarray):
             raise ValueError("For polydisperse case, D must be a numpy array.")
-        if not isinstance(nD, np.ndarray):
+        if not isinstance(nD, _np.ndarray):
             raise ValueError("nD must be a numpy array if provided.")
         if D.shape != nD.shape:
             raise ValueError("D and nD must have the same shape.")
-        if np.any(nD < 0):
+        if _np.any(nD < 0):
             raise ValueError("nD must be non-negative.")
-        if not np.isclose(np.sum(nD), 1, atol=1e-2):
-            nD = nD / np.sum(nD)  # Normalize if not already
+        if not _np.isclose(_np.sum(nD), 1, atol=1e-2):
+            nD = nD / _np.sum(nD)  # Normalize if not already
     if not isinstance(effective_medium, bool):
         raise ValueError("effective_medium must be a boolean value.")
 
@@ -943,16 +995,16 @@ def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD=None, *,
         # Monodisperse
         F_theta = phase_scatt(theta, lam, N_host, Np, D, nmax, as_ndarray=True)
     else:
-        Ac = np.pi*(D/2)**2  # cross-sectional area of each diameter
+        Ac = _np.pi*(D/2)**2  # cross-sectional area of each diameter
 
         # Polydisperse: ensemble average over diameter distribution
-        F_theta = np.zeros((len(theta), len(lam)), dtype=float)
+        F_theta = _np.zeros((len(theta), len(lam)), dtype=float)
         for i, Di in enumerate(D):
             # For each diameter, compute phase function
             F_theta += nD[i] * Ac[i] * phase_scatt(theta, lam, N_host, Np, Di, nmax, as_ndarray=True)
         
         # Normalize by average cross-sectional area
-        F_theta /= np.sum(nD * Ac)
+        F_theta /= _np.sum(nD * Ac)
 
     # Get structure factor
     S_q = structure_factor_PY(theta, lam, N_host, D, fv, nD)
@@ -965,7 +1017,7 @@ def phase_scatt_dense(theta, lam, N_host, Np, D, fv, nD=None, *,
 
     # if not convert phase function to dataframe
     df_phase_fun = pd.DataFrame(data=phase_fun, 
-                               index=np.degrees(theta), 
+                               index=_np.degrees(theta), 
                                columns=lam)
 
     return df_phase_fun
@@ -974,7 +1026,7 @@ def poly_sphere_cross_section(
     lam, D_list, p_list, Np, Nh, fv, *,
     n_theta: int = 361,             # dense angular grid for forward peaks
     atol_prob: float = 1e-6,        # tolerance for sum(p)=1
-    effective_medium: bool = True, # whether to compute effective Nh via Bruggeman
+    effective_medium: bool = True,  # whether to compute effective Nh via Bruggeman
 ):
     """
     Compute size-averaged scattering/absorption cross sections and asymmetry parameter
@@ -1007,34 +1059,34 @@ def poly_sphere_cross_section(
 
     Returns
     -------
-    csca_av : np.ndarray, shape (nλ,)
+    csca_av : _np.ndarray, shape (nλ,)
         Size-averaged scattering cross section per particle [µm²].
-    cabs_av : np.ndarray, shape (nλ,)
+    cabs_av : _np.ndarray, shape (nλ,)
         Size-averaged absorption cross section per particle [µm²].
-    g_av : np.ndarray, shape (nλ,)
+    g_av : _np.ndarray, shape (nλ,)
         Size-averaged asymmetry parameter (⟨cosθ⟩).
     """
     # ---------- Input sanitation ----------
-    D_list = np.atleast_1d(np.asarray(D_list, dtype=float))
-    p_list = np.atleast_1d(np.asarray(p_list, dtype=float))
+    D_list = _np.atleast_1d(_np.asarray(D_list, dtype=float))
+    p_list = _np.atleast_1d(_np.asarray(p_list, dtype=float))
 
     if D_list.ndim != 1 or p_list.ndim != 1:
         raise ValueError("D_list and p_list must be 1D arrays.")
     if D_list.shape != p_list.shape:
         raise ValueError(f"D_list and p_list must have the same length (got {len(D_list)} vs {len(p_list)}).")
-    if np.any(D_list <= 0):
+    if _np.any(D_list <= 0):
         raise ValueError("All diameters in D_list must be > 0.")
     if not (0 <= fv < 1):
         raise ValueError("fv (volume fraction) must be in [0, 1).")
-    if np.any(Np.real < 0) or np.any(Nh.real < 0):
+    if _np.any(_np.real < 0) or _np.any(Nh.real < 0):
         raise ValueError("Refractive indices must have nonnegative real parts.")
-    if np.any(Np.real < Np.imag):
+    if _np.any(_np.real < _np.imag):
         raise Warning("Method not valid for metallic particles")
 
     sp = p_list.sum()
-    if not np.isfinite(sp) or sp <= 0:
+    if not _np.isfinite(sp) or sp <= 0:
         raise ValueError("p_list must contain finite nonnegative values and sum to a positive number.")
-    if not np.isclose(sp, 1.0, atol=atol_prob):
+    if not _np.isclose(sp, 1.0, atol=atol_prob):
         p_list = p_list / sp  # soft-renormalize to 1
 
     # ---------- Effective medium for host (if your convention is to dress Nh) ----------
@@ -1047,32 +1099,32 @@ def poly_sphere_cross_section(
         Nh_eff = Nh
 
     # ---------- Precompute geometry ----------
-    Ac_list = np.pi * (D_list / 2.0) ** 2          # [µm²]
-    # V_list = (4.0/3.0) * np.pi * (D_list/2.0)**3 # [µm³]  # (unused here)
+    Ac_list = _np.pi * (D_list / 2.0) ** 2          # [µm²]
+    # V_list = (4.0/3.0) * _np.pi * (D_list/2.0)**3 # [µm³]  # (unused here)
 
     # ---------- Absorption: average q_abs * area ----------
-    cabs_av = np.zeros_like(lam, dtype=float)
+    cabs_av = _np.zeros_like(lam, dtype=float)
     for D, p, Ac in zip(D_list, p_list, Ac_list):
         # mie.scatter_efficiency must return arrays shaped (nλ,)
         qext, qsca, _ = scatter_efficiency(lam, Nh_eff, Np, D)
         qabs = qext - qsca
         # sanitize any tiny negative due to numerics
-        qabs = np.where(qabs < 0, 0.0, qabs)
+        qabs = _np.where(qabs < 0, 0.0, qabs)
         cabs_av += p * qabs * Ac
 
     # ---------- Scattering and g: via dense phase function integration ----------
     # Angular grid (dense & includes endpoints)
     n_theta = max(int(n_theta), 5)
-    theta = np.linspace(0.0, np.pi, n_theta)
+    theta = _np.linspace(0.0, _np.pi, n_theta)
 
     # phase_scatt_dense should return a DataFrame with index=θ° and columns=λ (your earlier design)
-    phase_fun_df = phase_scatt_dense(theta, lam, Nh_eff, Np, D_list, fv, p_list)
+    phase_fun_df = phase_scatt_dense(theta, lam, Nh_eff, Np, D_list, fv, p_list, effective_medium=False)
 
     # Compute Q_sca and g from differential efficiency
     qsca_av, g_av = scatter_from_phase_function(phase_fun_df)
 
     # Convert Q_sca (efficiency) to cross section via weighted area ⟨A⟩ = Σ p_i A_i
-    A_mean = float(np.sum(p_list * Ac_list))
+    A_mean = float(_np.sum(p_list * Ac_list))
     csca_av = qsca_av * A_mean
 
     return csca_av, cabs_av, g_av, phase_fun_df
