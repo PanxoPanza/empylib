@@ -13,7 +13,6 @@ import sys
 # sys.path.insert(0,empylib_folder)
 
 import numpy as np
-from numpy import meshgrid, cos, sin, sqrt, conj, real, abs, pi, exp
 from . import miescattering as mie
 from . import waveoptics as wv
 import iadpython as iad
@@ -92,8 +91,8 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     qext, qsca = mie.scatter_efficiency(lam, N[1], Np, D)[:2]
     qabs = qext - qsca # absorption efficiency
     
-    Ac = pi*D**2/4 # cross section area of sphere
-    Vp = pi*D**3/6 # volume of sphere
+    Ac = np.pi*D**2/4 # cross section area of sphere
+    Vp = np.pi*D**3/6 # volume of sphere
     cabs = Ac*qabs # absorption cross section
     cext = Ac*qext # extinction cross section
     
@@ -102,13 +101,10 @@ def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
     # for i in range(len(lam)):
     #     theta1[i] = wv.snell(N[0][i],N[1][i], theta)
         
-    Ttot = T*exp(-fv/Vp*cabs*tfilm/cos(theta1.real))
-    Tspec = T*exp(-fv/Vp*cext*tfilm/cos(theta1.real))
-    
-    return Ttot, Rtot, Tspec
+    Ttot = T*np.exp(-fv/Vp*cabs*tfilm/np.cos(theta1.real))
+    Tspec = T*np.exp(-fv/Vp*cext*tfilm/np.cos(theta1.real))
 
-import numpy as np
-import pandas as pd  # (optional, if adm returns DataFrames elsewhere)
+    return Ttot, Rtot, Tspec
 
 def adm_sphere(
     lam,
@@ -231,7 +227,7 @@ def adm_sphere(
 def adm_poly_sphere( lam, tfilm, fv, diameters, size_dist, Np, Nh,
     *, Nup=1.0, Ndw=1.0):
     """
-    Radiative transfer (IAD) for a film with a **polydisperse** ensemble of spheres.
+    Radiative transfer (IAD) for a film with a **polydisperse** ensemble of hard spheres.
 
     Pipeline:
       1) Use `mie.poly_sphere_cross_section` to get size-averaged cross sections per particle

@@ -14,6 +14,16 @@ import numpy as _np
 import empylib as _em
 from .utils import _ndarray_check, _local_to_global_angles
 from pathlib import Path as _Path
+from typing import Optional as _Optional, Tuple as _Tuple, Sequence as _Sequence, List as _List, Dict as _Dict, Any as _Any, Union as _Union
+
+__all__ = ['read_spectrafile', 
+           'AM15', 
+           'T_atmosphere', 
+           'T_atmosphere_hemi', 
+           'Bplanck', 
+           'yCIE_lum', 
+           'spectral_average', 
+           'plot_spectra']
 
 # Global cache for loaded files and interpolators
 _file_cache = {}
@@ -193,8 +203,6 @@ def T_atmosphere_hemi(lam, beta_tilt=0):
     T_hemi = T_hemi/max(_np.max(T_hemi), 1.0)
 
     return T_hemi
-    
-import numpy as np
 
 def Bplanck(lam, T, unit='wavelength'):
     """
@@ -220,10 +228,10 @@ def Bplanck(lam, T, unit='wavelength'):
     # --- constants (float64) ---
     c0   = float(_em.speed_of_light)  # m/s
     hbar = float(_em.hbar)            # J·s/rad
-    h    = 2.0*np.pi*hbar             # J·s
+    h    = 2.0*_np.pi*hbar             # J·s
     kB   = float(_em.kBoltzmann)      # J/K
 
-    lam = np.asarray(lam, dtype=np.float64)
+    lam = _np.asarray(lam, dtype=_np.float64)
     T   = float(T)
 
     # invalids (avoid divide-by-zero / negatives)
@@ -234,8 +242,8 @@ def Bplanck(lam, T, unit='wavelength'):
     # - for large x: use exp(-x)
     # - otherwise:   1/expm1(x)
     def inv_expm1(x):
-        x = np.asarray(x, dtype=np.float64)
-        out = np.empty_like(x)
+        x = _np.asarray(x, dtype=_np.float64)
+        out = _np.empty_like(x)
 
         # thresholds tuned for float64
         small = 1e-6
@@ -243,23 +251,23 @@ def Bplanck(lam, T, unit='wavelength'):
 
         # small-x series
         xs = x < small
-        if np.any(xs):
+        if _np.any(xs):
             xs_val = x[xs]
             out[xs] = (1.0/xs_val) - 0.5 + xs_val/12.0
 
         # large-x: 1/(e^x - 1) ≈ e^{-x}
         xl = x > large
-        if np.any(xl):
-            out[xl] = np.exp(-x[xl])
+        if _np.any(xl):
+            out[xl] = _np.exp(-x[xl])
 
         # mid range: safe to use expm1
         xm = ~(xs | xl)
-        if np.any(xm):
-            out[xm] = 1.0/np.expm1(x[xm])
+        if _np.any(xm):
+            out[xm] = 1.0/_np.expm1(x[xm])
 
         return out
 
-    with np.errstate(over='ignore', under='ignore', divide='ignore', invalid='ignore'):
+    with _np.errstate(over='ignore', under='ignore', divide='ignore', invalid='ignore'):
         if unit == 'wavelength':
             # meters
             ll = lam * 1e-6
@@ -283,8 +291,8 @@ def Bplanck(lam, T, unit='wavelength'):
             raise ValueError("unit must be 'wavelength' or 'frequency'")
 
     # set invalids to nan (e.g., nonpositive T or lam)
-    if np.any(invalid):
-        Ibb = np.where(invalid, np.nan, Ibb)
+    if _np.any(invalid):
+        Ibb = _np.where(invalid, _np.nan, Ibb)
 
     return Ibb
 
@@ -313,15 +321,12 @@ def yCIE_lum(lam):
     
     return yCIE
 
-import re
-import numpy as np
-
-def spectral_average(lam_um: np.ndarray,
-                           spec_prop: np.ndarray,
-                           *,
-                           spectrum: str = 'solar',
-                           T: float | None = None,
-                           bounds: tuple[float, float] | None = None) -> float:
+def spectral_average(lam_um: _np.ndarray,
+                     spec_prop: _np.ndarray,
+                     *,
+                     spectrum: str = 'solar',
+                     T: _Optional[float] = None,
+                     bounds: _Optional[_Tuple[float, float]] = None) -> float:
     """
     Compute a spectrum-weighted mean of a spectral property over wavelength.
 
@@ -363,30 +368,30 @@ def spectral_average(lam_um: np.ndarray,
     - Arrays are internally sorted by wavelength if needed.
     - Both numerator and denominator use the same validity mask.
     """
-    lam_um = np.asarray(lam_um, dtype=float)
-    spec_prop   = np.asarray(spec_prop,   dtype=float)
+    lam_um = _np.asarray(lam_um, dtype=float)
+    spec_prop   = _np.asarray(spec_prop,   dtype=float)
 
     # Basic checks
     if lam_um.ndim != 1 or spec_prop.ndim != 1:
         raise ValueError("`lam_um` and `spec_prop` must be 1D arrays.")
     if lam_um.size != spec_prop.size:
         raise ValueError("`lam_um` and `spec_prop` must have the same length.")
-    if not np.all(np.isfinite(lam_um)) or np.any(lam_um <= 0):
+    if not _np.all(_np.isfinite(lam_um)) or _np.any(lam_um <= 0):
         raise ValueError("`lam_um` must be positive and finite.")
 
     # Sort grid if not strictly increasing
-    if not np.all(np.diff(lam_um) > 0):
-        order = np.argsort(lam_um)
+    if not _np.all(_np.diff(lam_um) > 0):
+        order = _np.argsort(lam_um)
         lam_um = lam_um[order]
         spec_prop   = spec_prop[order]
 
     # Optional spectral bounds
     if bounds is not None:
         lam_min, lam_max = bounds
-        if not np.isfinite(lam_min) or not np.isfinite(lam_max) or lam_min >= lam_max:
+        if not _np.isfinite(lam_min) or not _np.isfinite(lam_max) or lam_min >= lam_max:
             raise ValueError("`bounds` must be (lam_min, lam_max) with lam_min < lam_max.")
         in_rng = (lam_um >= lam_min) & (lam_um <= lam_max)
-        if not np.any(in_rng):
+        if not _np.any(in_rng):
             raise ValueError("No samples fall within `bounds`.")
         lam_um = lam_um[in_rng]
         spec_prop   = spec_prop[in_rng]
@@ -400,14 +405,14 @@ def spectral_average(lam_um: np.ndarray,
         w = AM15(lam_um, spectra_type='direct')
     elif s in ('thermal', 'planck', 'blackbody'):
         T_use = 300.0 if T is None else float(T)
-        if not np.isfinite(T_use) or T_use <= 0:
+        if not _np.isfinite(T_use) or T_use <= 0:
             raise ValueError("Temperature `T` must be a positive finite value.")
         w = Bplanck(lam_um, T=T_use, unit='wavelength')
     else:
         raise ValueError("`spectrum` must be 'solar', 'solar:direct', or 'thermal'.")
 
     # Mask invalids: NaN property, NaN/negative/zero weights
-    mask = np.isfinite(spec_prop) & np.isfinite(w) & (w > 0)
+    mask = _np.isfinite(spec_prop) & _np.isfinite(w) & (w > 0)
     if mask.sum() < 2:
         raise ValueError("Not enough valid samples to integrate after masking/bounds.")
 
@@ -416,10 +421,241 @@ def spectral_average(lam_um: np.ndarray,
     ww  = w[mask]
 
     # Weighted average over wavelength
-    num = np.trapz(p * ww, lam)
-    den = np.trapz(ww, lam)
+    num = _np.trapz(p * ww, lam)
+    den = _np.trapz(ww, lam)
 
-    if den == 0 or not np.isfinite(den):
+    if den == 0 or not _np.isfinite(den):
         raise ValueError("Weight integral is zero or invalid; check chosen spectrum and bounds.")
 
     return float(num / den)
+
+def plot_spectra(
+        *curves: _Union[_Tuple[_Any, ...]],
+        # Background toggles & params
+        show_solar: bool = True,
+        solar_spectrum: str = 'global',   # 'global' or 'direct'
+        show_blackbody: bool = True,
+        show_atmosphere: bool = True,
+        atmosphere_tilt_deg: float = 0.0,
+        Tbb: float = 300.0,
+        Ebb_scale: float = 10.0,
+        lam_background_samples: int = 2000,
+        scale_atm_to_right_axis: bool = True,
+        # Axes / styling
+        xscale: str = 'log',              # 'log' or 'linear'
+        xticks: _Optional[_Sequence[float]] = (0.3, 0.4, 0.75, 1.4, 3, 8, 15, 30, 50, 100),
+        xlim: _Optional[_Tuple[float, float]] = None,
+        ylim_left: _Optional[_Tuple[float, float]] = None,
+        ylabel: _Optional[str] = None,
+        right_ylabel: str = r"Spectral irradiance (W m$^{-2}$ μm$^{-1}$)",
+        title: _Optional[str] = None,
+        # Legend control
+        curves_legend_loc: _Union[str, _Tuple[float, float]] = 'best',
+        show_background_legend: bool = False,   # If True include background items in the legend
+        curves_legend_kwargs: _Optional[_Dict[str, _Any]] = None,
+        background_alpha: float = 0.22,
+        figsize: _Tuple[float, float] = (10.0, 3.8),
+        tight_layout: bool = True,
+        # Behavior
+        sort_wavelength: bool = True,
+        validate_positive_x_for_log: bool = True,
+    ):
+    """
+    Multi-curve spectral plotting (matplotlib forwarding style) with a SINGLE legend.
+
+    Legend logic:
+      - Curves (user-provided lines) are always listed first.
+      - If show_background_legend=True, background entries (solar, blackbody, atmosphere)
+        are appended after the curve entries in the SAME legend.
+      - The legend placement is chosen using only the curve handles if curves_legend_loc='best'
+        to avoid covering the user data. Then the background handles are added without
+        recomputing placement (so placement is optimized for curves).
+
+    Curve specification tuples (each forwarded to ax.plot):
+        (x, y)
+        (x, y, fmt)
+        (x, y, fmt, {'label': 'R'})
+        (x, y, {'label': 'R', 'color': 'red'})
+        (x1, y1, x2, y2, fmt, {'label': 'multi'})
+    If the last element is a dict it is treated as **kwargs; otherwise all are positional.
+
+    Background labels:
+        Solar irradiance:  AM1.5 (<type>)
+        Blackbody:         $E_{\\mathrm{bb},\\lambda}(T) \\times s$
+        Atmospheric trans.: $T_{\\mathrm{atm},\\lambda}$  (scaled if requested)
+
+    Returns
+    -------
+    fig, ax
+    """
+    try:
+        import matplotlib.pyplot as _plt
+        from matplotlib.ticker import FuncFormatter as _FuncFormatter
+    except ImportError as exc:
+        raise ImportError("matplotlib is required for plot_multi_spectra_forward") from exc
+
+    # Default legend kwargs (compact)
+    if curves_legend_kwargs is None:
+        curves_legend_kwargs = dict(handlelength=1.8, handletextpad=0.6, borderaxespad=0.5, labelspacing=0.5)
+    else:
+        curves_legend_kwargs.setdefault('handlelength', 1.8)
+        curves_legend_kwargs.setdefault('handletextpad', 0.6)
+        curves_legend_kwargs.setdefault('borderaxespad', 0.5)
+        curves_legend_kwargs.setdefault('labelspacing', 0.5)
+
+    # --- Determine wavelength span from first elements of curve specs ---
+    xs_for_span: _List[_np.ndarray] = []
+    for spec in curves:
+        if not isinstance(spec, (tuple, list)) or not spec:
+            continue
+        first = spec[0]
+        if hasattr(first, "__len__") and not isinstance(first, (str, bytes, dict)):
+            try:
+                arr = _np.asarray(first, dtype=float)
+                if arr.ndim == 1 and arr.size:
+                    xs_for_span.append(arr)
+            except Exception:
+                pass
+    if not xs_for_span:
+        raise ValueError("No wavelength arrays detected in curve specifications.")
+    lam_all = _np.concatenate(xs_for_span)
+    lam_min = float(_np.nanmin(lam_all))
+    lam_max = float(_np.nanmax(lam_all))
+    if lam_min <= 0 and xscale == 'log':
+        raise ValueError("Non-positive wavelengths encountered with xscale='log'.")
+
+    lam_bg = (_np.logspace(_np.log10(lam_min), _np.log10(lam_max), lam_background_samples)
+              if xscale == 'log'
+              else _np.linspace(lam_min, lam_max, lam_background_samples))
+
+    fig, ax = _plt.subplots(figsize=figsize)
+    ax2 = ax.twinx()
+
+    curve_handles: _List[_Any] = []
+    background_handles: _List[_Any] = []
+    right_axis_max = 0.0
+
+    # --- Solar background ---
+    if show_solar:
+        spec_type = 'global' if solar_spectrum.lower().startswith('g') else 'direct'
+        Gsun = AM15(lam_bg, spectra_type=spec_type)
+        right_axis_max = max(right_axis_max, float(_np.nanmax(Gsun)))
+        h_sun = ax2.fill_between(
+            lam_bg, Gsun,
+            color="#f6f600", alpha=background_alpha, lw=0,
+            label=f"AM1.5 ({spec_type})"
+        )
+        background_handles.append(h_sun)
+    else:
+        spec_type = 'global'
+
+    # --- Blackbody background ---
+    if show_blackbody:
+        Ebb = _np.pi * Bplanck(lam_bg, Tbb, unit='wavelength')  # W/m^2/μm
+        Ebb_scaled = Ebb * Ebb_scale
+        right_axis_max = max(right_axis_max, float(_np.nanmax(Ebb_scaled)))
+        h_bb = ax2.fill_between(
+            lam_bg, Ebb_scaled,
+            color="#e10000", alpha=background_alpha, lw=0,
+            label=r"$E_{\mathrm{bb},\lambda}(%d\,\mathrm{K}) \times %g$" % (int(Tbb), Ebb_scale)
+        )
+        background_handles.append(h_bb)
+
+    if right_axis_max <= 0:
+        right_axis_max = 1.0
+
+    # --- Atmospheric transmittance background ---
+    atm_scale_factor = 1.0
+    if show_atmosphere:
+        Tatm = T_atmosphere_hemi(lam_bg, beta_tilt=atmosphere_tilt_deg)
+        if scale_atm_to_right_axis:
+            atm_scale_factor = right_axis_max
+        Tatm_scaled = Tatm * atm_scale_factor
+        h_atm = ax2.fill_between(
+            lam_bg, Tatm_scaled,
+            color="#0013e1", alpha=background_alpha, lw=0,
+            label=r"$T_{\mathrm{atm},\lambda}$"
+        )
+        background_handles.append(h_atm)
+
+    # --- User curve plotting (forward args) ---
+    for spec in curves:
+        if not isinstance(spec, (tuple, list)) or not spec:
+            continue
+        if isinstance(spec[-1], dict):
+            *positional, kw = spec
+            kwargs = kw.copy()
+        else:
+            positional = list(spec)
+            kwargs = {}
+
+        # Optional sorting for simple (x,y[,fmt]) pattern
+        if sort_wavelength and len(positional) >= 2:
+            try:
+                x_arr = _np.asarray(positional[0], dtype=float)
+                y_arr = _np.asarray(positional[1], dtype=float)
+                if x_arr.ndim == 1 and y_arr.ndim == 1 and x_arr.shape == y_arr.shape:
+                    if xscale == 'log' and validate_positive_x_for_log and _np.any(x_arr <= 0):
+                        raise ValueError("Non-positive wavelength values in a curve with xscale='log'.")
+                    if not _np.all(_np.diff(x_arr) > 0):
+                        order = _np.argsort(x_arr)
+                        positional[0] = x_arr[order]
+                        positional[1] = y_arr[order]
+            except Exception:
+                pass  # Let matplotlib raise if truly problematic
+
+        line_list = ax.plot(*positional, **kwargs)
+        if line_list:
+            curve_handles.append(line_list[0])
+
+    # --- Axis formatting ---
+    ax.set_xscale(xscale)
+    if xticks is not None:
+        ax.set_xticks(xticks)
+        from matplotlib.ticker import FuncFormatter as _FuncFormatter
+        ax.xaxis.set_major_formatter(_FuncFormatter(lambda v, _pos: f"{v:g}"))
+
+    ax.set_xlim(*(xlim if xlim is not None else (lam_min, lam_max)))
+    if ylim_left is not None:
+        ax.set_ylim(*ylim_left)
+
+    ax.set_xlabel(r"Wavelength ($\mu$m)")
+    ax2.set_ylabel(right_ylabel)
+    if title: ax.set_title(title)
+    if ylabel: ax.set_ylabel(ylabel)
+
+    # --- Legend assembly ---
+    if curve_handles:
+        # Determine placement using only curves if 'best'
+        if curves_legend_loc == 'best':
+            temp_leg = ax.legend(handles=curve_handles,
+                                 frameon=False,
+                                 loc='best',
+                                 **curves_legend_kwargs)
+            # Capture chosen location (internal attribute _loc may hold code or str)
+            chosen_loc = temp_leg._loc
+            temp_leg.remove()
+        else:
+            chosen_loc = curves_legend_loc
+
+        if show_background_legend and background_handles:
+            combined_handles = curve_handles + background_handles
+        else:
+            combined_handles = curve_handles
+
+        ax.legend(handles=combined_handles,
+                  frameon=False,
+                  loc=chosen_loc,
+                  **curves_legend_kwargs)
+    else:
+        # If no curve handles but backgrounds requested, still show background legend
+        if show_background_legend and background_handles:
+            ax.legend(handles=background_handles,
+                      frameon=False,
+                      loc=curves_legend_loc,
+                      **curves_legend_kwargs)
+
+    if tight_layout:
+        fig.tight_layout()
+
+    return fig, ax
