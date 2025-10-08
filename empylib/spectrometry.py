@@ -415,12 +415,15 @@ def read_uvvis(path: str,
     ----------
     path : str
         Path to the UV-Vis data file.
+    
     vendor : str, optional
         Explicit vendor name ("shimadzu" or "perkinelmer").
         If not given, it is inferred from the file extension.
+    
     col1_name : str, optional
         Override for the first column name (x-axis).
         Default is "wavelength (µm)" (converted from nm).
+    
     col2_name : str, optional
         Override for the second column name (y-axis).
         Default is taken from the file if available, otherwise inferred.
@@ -521,15 +524,18 @@ def find_uvvis_samples(
     Find UV-Vis sample names by scanning files named <tag>_<sample><ext>.
     - Case-insensitive for tags/aliases and extensions.
     - Keeps the sample name exactly as it appears in filenames (after the first separator).
+    
     Parameters
     ----------
     search_dirs : Iterable[str], optional
         List of directories to search for files.
         If None, defaults to ["."], the current directory.
+    
     tags : List[str], optional
         List of tags to look for in filenames.
         If None, defaults to:
         ["Rtot", "Ttot", "Rspec", "Tspec", "Rdif", "Tdif"].
+    
     aliases : Dict[str, List[str]], optional
         Mapping of tag → list of alternative names to try.
         If None, defaults to:
@@ -600,6 +606,7 @@ def sample_uvvis(sample: str = None,
     
     Files searched (case-insensitive), by default:
       Rtot, Ttot, Rspec, Tspec, Rdif, Tdif
+    
     Exact-name patterns per tag (sample kept exactly as passed):
       <tag>_<sample>.txt | <tag>_<sample>.asc
       <tag_lower>_<sample>.txt | <tag_lower>_<sample>.asc
@@ -609,13 +616,16 @@ def sample_uvvis(sample: str = None,
     sample : str, optional
         Sample name to look for in filenames (e.g. "MySample").
         If None, defaults to the sample files stored in "search_dirs".
+    
     search_dirs : Iterable[str], optional
         List of directories to search for files.
         If None, defaults to ["."], the current directory.
+    
     tags : List[str], optional
         List of tags to look for in filenames.
         If None, defaults to:
         ["Rtot", "Ttot", "Rspec", "Tspec", "Rdif", "Tdif"].
+    
     aliases : Dict[str, List[str]], optional
         Mapping of tag → list of alternative names to try.
         If None, defaults to:
@@ -642,6 +652,7 @@ def sample_uvvis(sample: str = None,
     -----
     - If wavelength arrays differ across files, the function interpolates each
       column onto the union of all wavelengths (interior-only; no extrapolation).
+    
     - If exactly two of (tot, dif, spec) are present in a family, the third is
       computed using tot = dif + spec. If all three exist, nothing is computed.
     """
@@ -731,9 +742,11 @@ def linestyle(sample: pd.DataFrame,
     ----------
     sample : pandas.DataFrame
         DataFrame with columns named like Rtot, Tspec, Rdif, Atot, etc.
+    
     linestyles : Dict, optional
         Mapping of line type keywords to matplotlib line styles.
         Defaults to {"tot": "-", "spec": ":", "dif": "--"}.
+    
     colors : Dict, optional
         Mapping of measurement type keywords to colors.
         Defaults to {"R": "r", "T": "b", "A": "k"}.
@@ -748,6 +761,7 @@ def linestyle(sample: pd.DataFrame,
     -----
     - The function looks for keywords in column names to determine line style
       and color. It is case-insensitive.
+    
     - If a column name does not match any known keywords, it defaults to
       a solid black line ("-k").
     """
