@@ -15,6 +15,7 @@ import sys
 import numpy as _np
 from . import miescattering as mie
 from . import waveoptics as wv
+from . import nklib as nk
 import iadpython as _iad
 import pandas as pd
 from typing import Union as _Union, Optional as _Optional
@@ -118,7 +119,8 @@ def adm_sphere(
     Nup: _Union[float, _np.ndarray] = 1.0,
     Ndw: _Union[float, _np.ndarray] = 1.0,
     diffuse: bool = False,
-    effective_medium: bool = True  # whether to compute effective Nh via Bruggeman
+    effective_medium: bool = True,  # whether to compute effective Nh via Bruggeman
+    check_inputs: bool = True
     ):
     """
     Compute spectral reflectance/transmittance of a film containing non-interacting **spherical particles**
@@ -182,17 +184,19 @@ def adm_sphere(
         raise ValueError("fv (volume fraction) must be in [0, 1).")
 
     nlam = lam.size
+    if check_inputs:
+        lam, Nh, Np, D = mie._check_mie_inputs(lam, Nh, Np, D)
 
-    Np_arr  = as_carray(Np,  "Np", nlam, val_type=complex)
-    Nh_arr  = as_carray(Nh,  "Nh", nlam, val_type=complex)
-    Nup_arr = as_carray(Nup, "Nup", nlam, val_type=complex)
-    Ndw_arr = as_carray(Ndw, "Ndw", nlam, val_type=complex)
+    Nup = as_carray(Nup, "Nup", nlam, val_type=complex)
+    Ndw = as_carray(Ndw, "Ndw", nlam, val_type=complex)
 
+    # ---------- Effective medium for host (if your convention is to dress Nh) ----------
     if effective_medium:
-        Nh_arr = _nk.emt_brugg(fv, Np_arr, Nh_arr)
+        # Compute effective refractive index of host using Bruggeman EMT
+        Nh = nk.emt_brugg(fv, Np, Nh)
 
     # ---------- Mie: efficiencies and g ----------
-    qext, qsca, gcos = mie.scatter_efficiency(lam, Nh_arr, Np_arr, D)
+    qext, qsca, gcos = mie.scatter_efficiency(lam, Nh, Np, D, check_inputs=False)  # shape (nλ,)
 
     qext = _np.asarray(qext, dtype=float)
     qsca = _np.asarray(qsca, dtype=float)
@@ -224,20 +228,22 @@ def adm_sphere(
         gcos = _np.zeros_like(gcos)
 
     # ---------- call IAD wrapper ----------
-    Ttot, Rtot, Tspec, Rspec = adm(lam, tfilm, k_sca, k_abs, Nh_arr, 
-                                   gcos=gcos, Nup=Nup_arr, Ndw=Ndw_arr)
+    Ttot, Rtot, Tspec, Rspec = adm(lam, tfilm, k_sca, k_abs, Nh, 
+                                   gcos=gcos, Nup=Nup, Ndw=Ndw)
 
     return Ttot, Rtot, Tspec, Rspec
 
-def adm_poly_sphere(lam: _Union[float, _np.ndarray], # wavelengths [µm]
-                    tfilm: float, fv: float, diameters: _Union[float, _np.ndarray], # sphere diameters [µm] 
-                    size_dist: _Union[float, _np.ndarray], # number-fraction weights p_i
-                    Np: _Union[float, _np.ndarray],  # particle refractive index
-                    Nh: _Union[float, _np.ndarray], # host refractive index
+def adm_poly_sphere(lam: _Union[float, _np.ndarray],        # wavelengths [µm]
+                    tfilm: float,                           # film thickness [mm]       
+                    fv: float,                              # film volume fraction 
+                    diameters: _Union[float, _np.ndarray],  # sphere diameters [µm] 
+                    size_dist: _Union[float, _np.ndarray],  # number-fraction weights p_i
+                    Np: _Union[float, _np.ndarray],         # particle refractive index
+                    Nh: _Union[float, _np.ndarray],         # host refractive index
                     *, 
-                    Nup: _Union[float, _np.ndarray] = 1.0, # refractive index above
-                    Ndw: _Union[float, _np.ndarray] = 1.0, # refractive index below
-                    effective_medium: bool = True  # whether to compute effective Nh via Bruggeman
+                    Nup: _Union[float, _np.ndarray] = 1.0,  # refractive index above
+                    Ndw: _Union[float, _np.ndarray] = 1.0,  # refractive index below
+                    effective_medium: bool = True           # whether to compute effective Nh via Bruggeman
                     ):
     """
     Radiative transfer (IAD) for a film with a **polydisperse** ensemble of hard spheres.
@@ -283,7 +289,6 @@ def adm_poly_sphere(lam: _Union[float, _np.ndarray], # wavelengths [µm]
     lam = _np.asarray(lam, float).ravel()
     if lam.ndim != 1 or lam.size == 0 or _np.any(lam <= 0) or not _np.all(_np.isfinite(lam)):
         raise ValueError("lam must be a 1D array of positive finite wavelengths [µm].")
-    nlam = lam.size
 
     D = _np.asarray(diameters, float).ravel()
     p = _np.asarray(size_dist, float).ravel()
@@ -293,14 +298,19 @@ def adm_poly_sphere(lam: _Union[float, _np.ndarray], # wavelengths [µm]
     if not _np.isscalar(tfilm) or tfilm < 0:
         raise ValueError("tfilm must be a nonnegative scalar in mm.")
 
+    # ---------- Effective medium for host (if your convention is to dress Nh) ----------
+    if effective_medium:
+        # Compute effective refractive index of host using Bruggeman EMT
+        Nh = nk.emt_brugg(fv, Np, Nh)
+
     # ---------- call Mie polydisperse helper ----------
     csca_av, cabs_av, _, phase_scatter = mie.poly_sphere_cross_section(
-            lam, D, p, Np, Nh, fv, effective_medium=effective_medium)
+            lam, D, p, Np, Nh, fv, effective_medium=False)
 
     # ---------- n_tot and coefficients (µm⁻¹) ----------
-    Ac = _np.pi * (D / 2.0) ** 2      # [µm²] (not used in formula below; kept for clarity)
+    Ac = _np.pi * (D / 2.0) ** 2                # [µm²] (not used in formula below; kept for clarity)
     V  = (4.0 / 3.0) * _np.pi * (D / 2.0) ** 3  # [µm³]
-    V_mean = float(_np.sum(p * V))    # ⟨V⟩ [µm³]
+    V_mean = float(_np.sum(p * V))              # ⟨V⟩ [µm³]
     if not _np.isfinite(V_mean) or V_mean <= 0:
         raise RuntimeError("Average particle volume ⟨V⟩ must be positive/finite.")
 
@@ -359,13 +369,14 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
         if _np.asarray(arr).shape != (nlam,):
             raise ValueError(f"{name} must have the same length as lam.")
 
-    Nh_arr  = as_carray(Nh,  "Nh", nlam, val_type=complex)
+    Nh_arr  = as_carray(Nh,  "Nh" , nlam, val_type=complex)
     Nup_arr = as_carray(Nup, "Nup", nlam, val_type=complex)
     Ndw_arr = as_carray(Ndw, "Ndw", nlam, val_type=complex)
 
     # ---------- convert to IAD units (mm^-1); include host absorption via Im(n) ----------
     # k_sca, k_abs are in µm^-1 -> mm^-1 multiply by 1e3
     mu_s = k_sca * 1e3
+
     # add material absorption from host's Im(n): kz_imag = (2π/λ)*Im(n) in mm^-1 (λ in µm -> factor 1e3)
     kz_imag = 2.0 * _np.pi / lam * Nh_arr.imag * 1e3
     mu_a = k_abs * 1e3 + 2.0 * kz_imag
@@ -433,8 +444,8 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
         pf_df.index.name = "cos(theta)"
 
     # ---------- run IAD per wavelength ----------
-    Ttot = _np.zeros(nlam, float)
-    Rtot = _np.zeros(nlam, float)
+    Ttot  = _np.zeros(nlam, float)
+    Rtot  = _np.zeros(nlam, float)
     Tspec = _np.zeros(nlam, float)
     Rspec = _np.zeros(nlam, float)
 

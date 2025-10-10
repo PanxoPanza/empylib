@@ -1,4 +1,5 @@
-import numpy as np
+import numpy as _np
+from typing import Union as _Union, Optional as _Optional
 
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
@@ -7,9 +8,9 @@ speed_of_light = 299792458      # m/s (speed of light)
 kBoltzmann = 1.38064852E-23     # J/K (Boltzman constant)
 
 def as_carray(x, name, nlam, val_type = complex):
-        arr = np.asarray(x)
+        arr = _np.asarray(x)
         if arr.ndim == 0:
-            return np.full(nlam, val_type(arr), dtype=val_type)
+            return _np.full(nlam, val_type(arr), dtype=val_type)
         if arr.shape != (nlam,):
             raise ValueError(f"{name} must be scalar or have shape (len(lam),).")
         return arr.astype(val_type)
@@ -19,8 +20,8 @@ def _ndarray_check(x):
     check if x is not ndarray. If so, convert x to a 1d ndarray
     '''
     
-    if not isinstance(x, np.ndarray):
-        return np.array([x]), True
+    if not isinstance(x, _np.ndarray):
+        return _np.array([x]), True
     return x, False
 
 # a function to convert units in electrodynamics
@@ -136,20 +137,20 @@ def _local_to_global_angles(theta_i, phi_i, beta_tilt, phi_tilt, restrict_to_upp
     """
     import numpy as np
 
-    original_shape = np.shape(theta_i)
-    theta_i = np.ravel(theta_i)
-    phi_i = np.ravel(phi_i)
+    original_shape = _np.shape(theta_i)
+    theta_i = _np.ravel(theta_i)
+    phi_i = _np.ravel(phi_i)
 
     # Tilted normal vector in global coordinates
-    n_local = np.array([
-        np.sin(beta_tilt) * np.cos(phi_tilt),
-        np.sin(beta_tilt) * np.sin(phi_tilt),
-        np.cos(beta_tilt)
+    n_local = _np.array([
+        _np.sin(beta_tilt) * _np.cos(phi_tilt),
+        _np.sin(beta_tilt) * _np.sin(phi_tilt),
+        _np.cos(beta_tilt)
     ])
     
     # Rotation axis: cross product between global z and tilted normal
-    axis = np.cross([0, 0, 1], n_local)
-    axis_norm = np.linalg.norm(axis)
+    axis = _np.cross([0, 0, 1], n_local)
+    axis_norm = _np.linalg.norm(axis)
 
     if axis_norm < 1e-8:
         # No tilt: return inputs unchanged
@@ -160,21 +161,21 @@ def _local_to_global_angles(theta_i, phi_i, beta_tilt, phi_tilt, restrict_to_upp
     axis = axis / axis_norm  # normalize
 
     # Rodrigues' rotation matrix for rotation around arbitrary axis
-    cos_b = np.cos(beta_tilt)
-    sin_b = np.sin(beta_tilt)
+    cos_b = _np.cos(beta_tilt)
+    sin_b = _np.sin(beta_tilt)
     ux, uy, uz = axis
 
-    R = np.array([
+    R = _np.array([
         [cos_b + ux**2 * (1 - cos_b),     ux*uy*(1 - cos_b) - uz*sin_b,  ux*uz*(1 - cos_b) + uy*sin_b],
         [uy*ux*(1 - cos_b) + uz*sin_b,    cos_b + uy**2 * (1 - cos_b),   uy*uz*(1 - cos_b) - ux*sin_b],
         [uz*ux*(1 - cos_b) - uy*sin_b,    uz*uy*(1 - cos_b) + ux*sin_b,  cos_b + uz**2 * (1 - cos_b)]
     ])
 
     # Convert local spherical to Cartesian coordinates
-    x = np.sin(theta_i) * np.cos(phi_i)
-    y = np.sin(theta_i) * np.sin(phi_i)
-    z = np.cos(theta_i)
-    v_local = np.stack([x, y, z], axis=0)  # shape: (3, N)
+    x = _np.sin(theta_i) * _np.cos(phi_i)
+    y = _np.sin(theta_i) * _np.sin(phi_i)
+    z = _np.cos(theta_i)
+    v_local = _np.stack([x, y, z], axis=0)  # shape: (3, N)
 
     # Rotate to global coordinates
     v_global = R @ v_local
@@ -186,8 +187,8 @@ def _local_to_global_angles(theta_i, phi_i, beta_tilt, phi_tilt, restrict_to_upp
 
     # Convert to global spherical coordinates
     xg, yg, zg = v_global[0], v_global[1], v_global[2]
-    theta = np.arccos(np.clip(zg, -1, 1))
-    phi = np.mod(np.arctan2(yg, xg), 2 * np.pi)
+    theta = _np.arccos(_np.clip(zg, -1, 1))
+    phi = _np.mod(_np.arctan2(yg, xg), 2 * _np.pi)
 
     # Restore original shape
     theta = theta.reshape(original_shape)
@@ -197,7 +198,7 @@ def _local_to_global_angles(theta_i, phi_i, beta_tilt, phi_tilt, restrict_to_upp
         return theta.item(), phi.item()
     return theta, phi
 
-def _check_mie_inputs(lam=None, N_host=None, Np_shells=None, D=None):
+def _check_mie_inputs(lam=None, N_host=None, Np_shells=None, D=None, *, size_dist=None):
     """
     Validate and normalize inputs for Mie / multilayer-sphere calculations.
 
@@ -218,101 +219,141 @@ def _check_mie_inputs(lam=None, N_host=None, Np_shells=None, D=None):
           - list/tuple of scalars/1D arrays (one per layer; arrays must match len(lam))
           - 2D ndarray shaped (n_layers, nλ)
         If arrays are provided but lam is None, error.
-    D : float or 1D array-like of float, optional
-        OUTER diameter of each shell layer (µm).
-        - scalar: single-layer (solid sphere)
-        - 1D: multilayer shell outer diameters
-        Must be strictly increasing for multilayer (inner < ... < outer) and all > 0.
+    D : float, 1D array-like of float, or list of those, optional
+        Outer diameter(s) per layer (µm). Semantics:
+          - float: single-layer, monodisperse
+          - 1D array: single-layer, polydisperse (size distribution)
+          - list of floats: multilayer, monodisperse
+          - list of 1D arrays: multilayer, polydisperse (all arrays must be same length)
+        For multilayer monodisperse (list of floats): strictly increasing.
+        For multilayer polydisperse (list of arrays): element-wise strictly increasing across layers.
+    size_dist : None or 1D array-like of float, optional (default None)
+        Size-distribution weights. **If None, the distribution must be monodisperse** (i.e., all layers
+        length==1). For polydisperse D, you must provide size_dist with matching length; it will be normalized.
 
     Returns
     -------
     lam_out : (nλ,) ndarray of float or None
-        Wavelength grid (if provided), 1D and strictly positive.
     N_host_out : (nλ,) ndarray of complex or None
-        Host refractive index aligned to lam_out (broadcast if scalar).
     Np_out : (n_layers, nλ) ndarray of complex or None
-        Shell refractive indices stacked by layer (inner→outer). If D is provided,
-        rows are sorted to match sorted(D).
-    D_out : (n_layers,) ndarray of float or None
-        Shell outer diameters (µm), sorted ascending.
+        Layers ordered inner→outer. If D is provided, rows are reordered accordingly.
+    D_out : list[ndarray]
+        One ndarray per layer. For monodisperse layers, each entry is a length-1 array.
+    size_dist_out : (n_bins,) ndarray of float
+        Normalized size-distribution vector. For monodisperse, array([1.0]).
 
     Notes
     -----
     - If both D and Np_shells are provided, their number of layers must match.
-    - This function only checks shapes/values and performs broadcasting/sorting.
-      It does not compute anything optical.
+    - If size_dist is None, inputs must be monodisperse (no arrays of length > 1 in D).
     """
     # ---- lam ----
     if lam is None:
         lam_out = None
     else:
-        lam_arr = np.asarray(lam, dtype=float).ravel()
+        lam_arr = _np.asarray(lam, dtype=float).ravel()
         if lam_arr.ndim != 1 or lam_arr.size == 0:
             raise ValueError("lam must be a 1D array (non-empty) or a scalar.")
-        if not np.all(np.isfinite(lam_arr)) or np.any(lam_arr <= 0):
+        if not _np.all(_np.isfinite(lam_arr)) or _np.any(lam_arr <= 0):
             raise ValueError("All wavelengths in lam must be finite and > 0 (µm).")
         lam_out = lam_arr
 
     nlam = None if lam_out is None else lam_out.size
 
-    # ---- D (diameters) ----
+    # ---- D (diameters) → list[ndarray]
     D_out = None
-    if D is not None:
-        if np.isscalar(D):
-            D_list = [float(D)]
-        else:
-            try:
-                D_list = [float(d) for d in np.asarray(D).ravel()]
-            except Exception:
-                raise TypeError("D must be a float or a 1D list/array of outer diameters (µm).")
-            if len(D_list) == 0:
-                raise ValueError("D cannot be an empty list/array.")
-        if any((not np.isfinite(d)) or (d <= 0) for d in D_list):
-            raise ValueError("All diameters in D must be finite and > 0 (µm).")
-        if len(D_list) > 1 and any(D_list[i] >= D_list[i+1] for i in range(len(D_list)-1)):
-            raise ValueError("For multilayer spheres, D must be strictly increasing (inner < ... < outer).")
-        D_out = np.asarray(D_list, dtype=float)
+    n_bins = None  # number of size bins if polydisperse
 
-    # ---- Np_shells (layers) ----
+    if D is not None:
+        def _as_1d_array_positive(x):
+            arr = _np.asarray(x, dtype=float).ravel()
+            if arr.size == 0:
+                raise ValueError("D arrays must be non-empty.")
+            if not _np.all(_np.isfinite(arr)) or _np.any(arr <= 0):
+                raise ValueError("All diameters in D must be finite and > 0 (µm).")
+            return arr
+
+        if _np.isscalar(D) or (isinstance(D, _np.ndarray) and _np.asarray(D).ndim == 0):
+            # single-layer monodisperse
+            D_out = [_np.array([float(D)], dtype=float)]
+
+        elif isinstance(D, (list, tuple)):
+            if len(D) == 0:
+                raise ValueError("D cannot be an empty list.")
+            D_list = []
+            for d in D:
+                if _np.isscalar(d) or (isinstance(d, _np.ndarray) and _np.asarray(d).ndim == 0):
+                    D_list.append(_np.array([float(d)], dtype=float))
+                else:
+                    arr = _as_1d_array_positive(d)
+                    D_list.append(arr)
+
+            lengths = _np.array([a.size for a in D_list], dtype=int)
+            if _np.any(lengths > 1):
+                # polydisperse multilayer
+                n_bins = int(lengths.max())
+                if not _np.all(lengths == n_bins):
+                    raise ValueError("For multilayer polydisperse, all layer arrays in D must have the same length.")
+                D_stack = _np.vstack(D_list)
+                if _np.any(_np.diff(D_stack, axis=0) <= 0):
+                    raise ValueError("For multilayer polydisperse, diameters must be element-wise strictly increasing across layers.")
+            else:
+                # multilayer monodisperse: strictly increasing floats
+                mono_vals = _np.array([a.item() for a in D_list], dtype=float)
+                if _np.any(~_np.isfinite(mono_vals)) or _np.any(mono_vals <= 0):
+                    raise ValueError("All diameters in D must be finite and > 0 (µm).")
+                if _np.any(_np.diff(mono_vals) <= 0):
+                    raise ValueError("For multilayer monodisperse, D must be strictly increasing (inner < ... < outer).")
+
+            D_out = D_list
+
+        else:
+            # single-layer polydisperse (1D array)
+            arr = _as_1d_array_positive(D)
+            D_out = [arr]
+
+        if n_bins is None:
+            n_bins = int(max(a.size for a in D_out))
+
+        # Enforce either all mono or all share n_bins>1
+        if not (all(a.size == 1 for a in D_out) or all(a.size == n_bins for a in D_out)):
+            raise ValueError("All layers must be monodisperse (length=1) or all polydisperse with a common length.")
+
+    # ---- Np_shells (layers) → (n_layers, nλ)
     Np_out = None
     if Np_shells is not None:
-        # Normalize to a (n_layers, nλ) 2D array (or (n_layers, 1) if lam is None and scalars)
-        # Accept scalar, 1D spectrum, list of those, or 2D array.
         def to_layer_array(x):
-            # returns 1D array for a single layer (length nlam if available, else length 1)
-            if x.ndim == 0:  # scalar
+            xa = _np.asarray(x)
+            if xa.ndim == 0:  # scalar
                 if nlam is None:
-                    return np.array([complex(x)], dtype=complex)
-                return np.full(nlam, complex(x), dtype=complex)
-            arr = np.asarray(x, dtype=complex).ravel()
+                    return _np.array([complex(xa)], dtype=complex)
+                return _np.full(nlam, complex(xa), dtype=complex)
+            arr = _np.asarray(xa, dtype=complex).ravel()
             if lam_out is None:
                 raise ValueError("Spectral Np_shells provided but lam is None. Provide lam.")
             if arr.size != nlam:
                 raise ValueError(f"A spectral layer has length {arr.size}, expected len(lam)={nlam}.")
             return arr
 
-        if isinstance(Np_shells, list):
+        if isinstance(Np_shells, (list, tuple)):
             if len(Np_shells) == 0:
                 raise ValueError("Np_shells list cannot be empty.")
             layers = [to_layer_array(x) for x in Np_shells]
-            # All layers must have same spectral length (nlam) if lam given
-            L = [arr.size for arr in layers]
-            if nlam is not None and any(Li != nlam for Li in L):
+            if nlam is not None and any(arr.size != nlam for arr in layers):
                 raise ValueError("All spectral layers in Np_shells must have length len(lam).")
-            Np_out = np.vstack([arr.reshape(1, -1) for arr in layers]).astype(complex)
+            Np_out = _np.vstack([arr.reshape(1, -1) for arr in layers]).astype(complex)
         else:
-            arr = np.asarray(Np_shells)
-            if arr.ndim == 0:  # scalar
+            arr = _np.asarray(Np_shells)
+            if arr.ndim == 0:
                 Np_out = to_layer_array(arr).reshape(1, -1)
-            elif arr.ndim == 1:  # single-layer spectrum
+            elif arr.ndim == 1:
                 Np_out = to_layer_array(arr).reshape(1, -1)
             elif arr.ndim == 2:
-                # Expect shape (n_layers, nlam)
                 if lam_out is None:
                     raise ValueError("2D Np_shells provided but lam is None. Provide lam.")
                 if arr.shape[1] != nlam:
                     raise ValueError(f"Np_shells second dimension must equal len(lam)={nlam}.")
-                if not np.all(np.isfinite(arr)):
+                if not _np.all(_np.isfinite(arr)):
                     raise ValueError("Np_shells contains non-finite values.")
                 Np_out = arr.astype(complex)
             else:
@@ -320,38 +361,99 @@ def _check_mie_inputs(lam=None, N_host=None, Np_shells=None, D=None):
 
     # ---- Cross-check layers vs diameters ----
     if (Np_out is not None) and (D_out is not None):
-        n_layers_n = Np_out.shape[0]
-        n_layers_d = D_out.size
-        if n_layers_n != n_layers_d:
+        if Np_out.shape[0] != len(D_out):
             raise ValueError(
-                f"Number of layers mismatch: len(D)={n_layers_d} but Np_shells has {n_layers_n} layer(s)."
+                f"Number of layers mismatch: len(D)={len(D_out)} but Np_shells has {Np_out.shape[0]} layer(s)."
             )
-        # Sort by D ascending and reorder Np_out rows accordingly
-        order = np.argsort(D_out)
-        D_out = D_out[order]
-        Np_out = Np_out[order, :]
 
     # ---- N_host ----
     N_host_out = None
     if N_host is not None:
-        if np.isscalar(N_host):
+        if _np.isscalar(N_host):
             if nlam is None:
-                N_host_out = np.array([complex(N_host)], dtype=complex)
+                N_host_out = _np.array([complex(N_host)], dtype=complex)
             else:
-                N_host_out = np.full(nlam, complex(N_host), dtype=complex)
+                N_host_out = _np.full(nlam, complex(N_host), dtype=complex)
         else:
             if lam_out is None:
                 raise ValueError("Spectral N_host provided but lam is None. Provide lam.")
-            arr = np.asarray(N_host, dtype=complex).ravel()
+            arr = _np.asarray(N_host, dtype=complex).ravel()
             if arr.size != nlam:
                 raise ValueError(f"N_host length must equal len(lam)={nlam}.")
             N_host_out = arr
 
+    # ---- size_dist (normalize & validate) ----
+    # If size_dist is None, inputs must be monodisperse.
+    if D_out is None:
+        # Without D, default to monodisperse [1.0]
+        size_dist_out = None
+    else:
+        is_mono = all(a.size == 1 for a in D_out)
+        if size_dist is None:
+            if not is_mono:
+                raise ValueError(
+                    "size_dist is None but D is polydisperse. "
+                    "Provide size_dist with length equal to the number of size bins."
+                )
+            size_dist_out = None
+        else:
+            sd = _np.asarray(size_dist, dtype=float).ravel()
+            if not _np.all(_np.isfinite(sd)) or _np.any(sd < 0) or sd.size == 0:
+                raise ValueError("size_dist must contain non-negative finite values.")
+            if is_mono:
+                if sd.size != 1:
+                    raise ValueError("For monodisperse D, size_dist must be length 1.")
+                s = sd.sum()
+                if s <= 0:
+                    raise ValueError("size_dist sum must be > 0.")
+                size_dist_out = sd / s
+            else:
+                n_bins = D_out[0].size  # all layers share same length if polydisperse
+                if sd.size != n_bins:
+                    raise ValueError(f"size_dist length {sd.size} must match number of size bins {n_bins}.")
+                s = sd.sum()
+                if s <= 0:
+                    raise ValueError("size_dist sum must be > 0.")
+                size_dist_out = sd / s
+
     # ---- Final NaN/Inf guards ----
-    for name, arr in [("lam", lam_out), ("N_host", N_host_out), ("Np_shells", Np_out), ("D", D_out)]:
+    for name, arr in [("lam", lam_out), ("N_host", N_host_out), ("Np_shells", Np_out)]:
         if arr is None:
             continue
-        if not np.all(np.isfinite(arr)):
+        if not _np.all(_np.isfinite(arr)):
             raise ValueError(f"{name} contains non-finite values.")
 
-    return lam_out, N_host_out, Np_out, D_out
+    if D_out is not None:
+        for a in D_out:
+            if not _np.all(_np.isfinite(a)):
+                raise ValueError("D contains non-finite values.")
+
+    return lam_out, N_host_out, Np_out, D_out, size_dist_out
+
+def _check_theta(theta: _Optional[_Union[float, _np.ndarray]],
+                 n_theta: int = 361) -> _np.ndarray:
+    """
+    Validate and format the scattering angle array (theta).
+
+    Parameters
+    ----------
+    theta : float or ndarray or None
+        Scattering angle(s) in radians. If None, generates a dense grid from 0 to π.
+    n_theta : int, optional
+        Number of points in the angular grid if `theta` is None.
+
+    Returns
+    -------
+    theta : _np.ndarray
+        1D array of angles in radians, shape (n_theta,).
+    """
+    if theta is None:
+        theta = _np.linspace(0.0, 2*_np.pi, max(int(n_theta), 5))
+    
+    elif _np.isscalar(theta):
+        theta = _np.array([float(theta)])
+    
+    else:
+        theta = _np.asarray(theta, dtype=float).ravel()
+
+    return theta

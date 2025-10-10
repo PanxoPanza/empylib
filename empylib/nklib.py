@@ -16,7 +16,8 @@ from typing import Callable # used to check callable variables
 from .utils import _ndarray_check
 from pathlib import Path
 # import refidx as ri
-from .utils import convert_units
+from .utils import convert_units, _check_mie_inputs
+from typing import List as _List, Union as _Union
 import yaml
 import requests
 from io import StringIO
@@ -473,6 +474,69 @@ def drude(epsinf,wp,gamma,lam):
     w = 2*_np.pi*3E14/lam*hbar/eV  # conver from um to eV 
     
     return _np.sqrt(epsinf - wp**2/(w**2 + 1j*gamma*w))
+
+def emt_multilayer_sphere(D: _List[float],
+                          Np: _List[_Union[float, _np.ndarray]],
+                          *,
+                          check_inputs=True):
+    '''
+    Effective refractive index of a multilayer sphere using Bruggeman EMT.
+    
+    Parameters
+    ----------
+    D_layers: _List[float]
+        List of layer thicknesses (in um)
+
+    Np: _List[_Union[float, _np.ndarray]]
+        List of refractive indices for each layer
+    
+    check_inputs: bool, optional
+        If True, validate and preprocess inputs (default is True)
+
+    Returns
+    -------        
+    N_eff: _np.ndarray
+        Effective refractive index of the multilayer sphere
+    '''
+    if check_inputs:
+        _, _,  Np, D, _ = _check_mie_inputs(Np_shells=Np, D=D)
+
+    D = _np.asarray(D)           # ensure D is np array
+
+    # Single layer case
+    if len(D) == 1:
+        return Np.reshape(-1)
+
+    # Multilayer case: compute volume fractions and apply Bruggeman EMT
+    R_layers = D / 2.0  # Convert to radii
+
+    # Start with the innermost layer as the "host"
+    N_eff = Np[0].copy()
+
+    # Iteratively add each outer layer using Bruggeman EMT
+    for i in range(1, len(D)):
+        # Volume of current layer shell
+        if i == 1:
+            # First shell: volume from center to R_layers[1]
+            V_total = (4/3) * _np.pi * R_layers[i]**3
+            V_inner = (4/3) * _np.pi * R_layers[i-1]**3
+        else:
+            # Subsequent shells: volume of current composite + new shell
+            V_total = (4/3) * _np.pi * R_layers[i]**3
+            V_inner = (4/3) * _np.pi * R_layers[i-1]**3
+        
+        V_shell = V_total - V_inner
+        
+        # Volume fractions
+        fv_shell = V_shell / V_total
+        fv_inner = V_inner / V_total
+        
+        # Apply Bruggeman EMT: 
+        # N_eff (previous composite) is now the "host"
+        # Np[i] (current layer) is the "inclusion"
+        N_eff = emt_brugg(fv_shell, Np[i], N_eff)
+    
+    return N_eff
 
 def emt_brugg(fv_1,nk_1,nk_2):
     '''
