@@ -343,10 +343,12 @@ def scatter_efficiency(lam: _Union[float, _np.ndarray],
     
     Returns
     -------
-    Qext : ndarray
-        Extinction efficiency
+    Qabs : ndarray
+        Absorption efficiency
+
     Qsca : ndarray
         Scattering efficiency 
+    
     gcos : ndarray
         Asymmetry parameter
     '''
@@ -363,14 +365,15 @@ def scatter_efficiency(lam: _Union[float, _np.ndarray],
     m = m.transpose()
     
     # Preallocate outputs
-    Qext = _np.zeros_like(lam, dtype=float)
-    Qsca = _np.zeros_like(lam, dtype=float)
+    qext = _np.zeros_like(lam, dtype=float)
+    qsca = _np.zeros_like(lam, dtype=float)
     gcos = _np.zeros_like(lam, dtype=float)
     for i in range(len(lam)):
-        Qext[i], Qsca[i], gcos[i], *_ = _cross_section_at_lam(m[i, :], x[i, :], nmax)
-        
-    # outputs: qext, qsca, gcos
-    return Qext, Qsca, gcos
+        qext[i], qsca[i], gcos[i], *_ = _cross_section_at_lam(m[i, :], x[i, :], nmax)
+
+    # outputs: qabs, qsca, gcos
+    qabs = qext - qsca
+    return qabs, qsca, gcos
 
 def scatter_coefficients(lam: _Union[float, _np.ndarray],
                          Nh: _Union[float, _np.ndarray],
@@ -611,18 +614,18 @@ def scatter_stokes(lam: _Union[float, _np.ndarray],
 
     return S11, S12, S33, S34
 
-def phase_scatt(lam: _Union[float, _np.ndarray], 
-                Nh: _Union[float, _np.ndarray], 
-                Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
-                D: _Union[float, _List[float]],
-                *,
-                theta: _Union[float, _np.ndarray] = None, 
-                nmax: int = None, 
-                as_ndarray: bool = False,
-                check_inputs: bool = True):
+def _phase_function_single(lam: _Union[float, _np.ndarray], 
+                            Nh: _Union[float, _np.ndarray], 
+                            Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
+                            D: _Union[float, _List[float]],
+                            *,
+                            theta: _Union[float, _np.ndarray] = None, 
+                            nmax: int = None, 
+                            as_ndarray: bool = False,
+                            check_inputs: bool = True):
     """
-    Calculate the scattering phase function. The intensity is normalized 
-    such that the integral is equal to qsca
+    Calculate the scattering phase function of a single sphere. The intensity 
+    is normalized such that the integral is equal to qsca.
 
     Adapted from the miepython library: https://github.com/scottprahl/miepython
     Original Author: Scott Prahl
@@ -743,60 +746,111 @@ def phase_scatt_HG(lam: _Union[float, _np.ndarray],
 
     return df_phase_fun
     
-def scatter_from_phase_function(phase_fun):
+def scatter_from_phase_function(phase_fun, 
+                                *, 
+                                n_theta: int = 181, 
+                                atol_deg: float = 1.0):
     """
     Compute Qsca and <cos theta> from a DataFrame whose rows are labeled
     with scattering angles in degrees and columns with wavelengths.
-    
+
+    This version (a) verifies coverage of [0°, 180°] and (b) interpolates the
+    phase function onto a regular theta grid in [0°, 180°] before integrating,
+    while preserving the original integration in mu = cos(theta).
+
     Parameters
     ----------
     phase_fun : pd.DataFrame
-        Phase function. Row index must be theta in degrees from 0 to over 180.
+        Phase function. Row index must be theta in degrees (not necessarily uniform).
         Columns correspond to different wavelengths.
+    
+    n_theta : int, optional
+        Number of points for the interpolation grid in [0°, 180°]. Default 181 (~0.25°).
+    
+    atol_deg : float, optional
+        Tolerance (in degrees) to accept coverage near 0° and 180°. Default 1.0°.
 
     Returns
     -------
     qsca : ndarray
         Scattering efficiency for each column.
-        
+    
     gcos : ndarray
         Asymmetry parameter for each column.
     """
-    # Step 1: Sort index by angle
-    phase_fun = phase_fun.sort_index()
-    lam = phase_fun.columns.to_numpy()  # wavelength (um)
+    if not isinstance(phase_fun, _pd.DataFrame):
+        raise TypeError("phase_fun must be a pandas DataFrame (angles as index in degrees).")
 
-    # Step 2: Subset to angles [0°, 180°]
-    subset = phase_fun.loc[(phase_fun.index >= 0) & (phase_fun.index <= 180)]
+    # ---- 1) Sort and basic checks ----
+    pf = phase_fun.sort_index().copy()
+    # ensure numeric index (degrees)
+    try:
+        theta_all = _np.asarray(pf.index, dtype=float)
+    except Exception as e:
+        raise TypeError("Row index must be numeric degrees (float).") from e
 
-    # Step 3: Validation
-    theta = subset.index.to_numpy()
-    if len(theta) < 2:
-        raise ValueError("Not enough angle samples between 0 and 180 degrees.")
+    if theta_all.size < 2:
+        raise ValueError("Theta index must contain at least two samples.")
 
-    if not _np.isclose(theta[0], 0, atol=3) or not _np.isclose(theta[-1], 180, atol=3):
-        raise ValueError("Selected theta range must span from 0 to 180 degrees.")
+    # ---- 2) Verify coverage of [0°, 180°] (allow larger theta; just require at least this span) ----
+    tmin, tmax = float(_np.nanmin(theta_all)), float(_np.nanmax(theta_all))
+    if tmin > 0.0 + atol_deg or tmax < 180.0 - atol_deg:
+        raise ValueError(
+            f"Theta index must cover at least [0°, 180°] within ±{atol_deg}°. "
+            f"Got range [{tmin:.3f}°, {tmax:.3f}°]."
+        )
 
-    if not _np.all(_np.diff(theta) > 0):
-        raise ValueError("Theta values must be strictly increasing — no duplicates allowed.")
+    # ---- 3) Clip to [0°, 180°] (keep only the needed range for integration) ----
+    pf = pf.loc[(pf.index >= 0.0 - atol_deg) & (pf.index <= 180.0 + atol_deg)].copy()
+    # Consolidate duplicates by averaging
+    pf.index = _np.asarray(pf.index, dtype=float)
+    pf = pf.groupby(level=0).mean().sort_index()
 
-    mu = _np.cos(_np.radians(theta))
+    # Re-check span after clipping/cleaning
+    theta_clipped = pf.index.to_numpy()
+    if theta_clipped[0] > 0.0 + atol_deg or theta_clipped[-1] < 180.0 - atol_deg:
+        raise ValueError("After clipping/cleaning, theta does not span [0°, 180°] within tolerance.")
 
-    # Sort phase function and mu in ascending order
-    p_theta = subset.values[_np.argsort(mu)]
-    mu.sort()
+    # ---- 4) Interpolate onto a regular theta grid in [0°, 180°] ----
+    if n_theta < 2:
+        raise ValueError("n_theta must be >= 2.")
+    theta_eval_deg = _np.linspace(0.0, 180.0, n_theta)              # degrees
+    theta_eval_rad = _np.radians(theta_eval_deg)                     # radians (for cos)
+    ncols = pf.shape[1]
+    P_eval = _np.empty((n_theta, ncols), dtype=float)
 
-    # compute scattering efficiency and asymmetry parameter
-    qsca = 2 * _np.pi * _np.trapz(p_theta, mu, axis=0)
-    gcos = 2 * _np.pi * _np.trapz(mu*p_theta.T, mu, axis=1)/qsca
+    x_src = theta_clipped
+    for j, col in enumerate(pf.columns):
+        y_src = pf[col].to_numpy()
+        mask = _np.isfinite(y_src)
+        xj = x_src[mask]
+        yj = y_src[mask]
+        if xj.size < 2:
+            raise ValueError(f"Column '{col}': not enough finite samples to interpolate.")
+        if xj.min() > 0.0 + atol_deg or xj.max() < 180.0 - atol_deg:
+            raise ValueError(f"Column '{col}': finite data must span [0°, 180°] within tolerance.")
+        # Linear interpolation within the convex hull
+        P_eval[:, j] = _np.interp(theta_eval_deg, xj, yj)
 
-    # sanitize NaNs/infs if any wavelength has vanishing scattering
-    mask_bad = ~_np.isfinite(qsca) | (qsca <= 0)
+    # ---- 5) Change variable to mu = cos(theta) and integrate over mu ----
+    mu = _np.cos(theta_eval_rad)              # mu is descending from +1 to -1 as theta increases
+    order = _np.argsort(mu)                   # sort ascending mu (-1 .. 1)
+    mu_sorted = mu[order]
+    p_sorted = P_eval[order, :]               # reorder rows to match ascending mu
+
+    # Compute Qsca and g using trapezoidal rule in mu
+    qsca = 2.0 * _np.pi * _np.trapz(p_sorted, mu_sorted, axis=0)
+    with _np.errstate(divide='ignore', invalid='ignore'):
+        gcos = (2.0 * _np.pi * _np.trapz((mu_sorted[:, None] * p_sorted), mu_sorted, axis=0)) / qsca
+
+    # ---- 6) Sanitize bad/zero cases ----
+    mask_bad = ~_np.isfinite(qsca) | (qsca <= 0.0)
     if _np.any(mask_bad):
-        gcos[mask_bad] = 0.0
         qsca[mask_bad] = 0.0
+        gcos[mask_bad] = 0.0
 
     return qsca, gcos
+
 
 def _mono_percus_yevick(fv, q, D):
     """
@@ -988,18 +1042,19 @@ def structure_factor_PY(lam: _Union[float, _np.ndarray],
 
     return S_q
 
-def phase_scatt_dense(lam: _Union[float, _np.ndarray],
-                      Nh: _Union[float, _np.ndarray],
-                      Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
-                      D: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
-                      fv: float,
-                      *, 
-                      size_dist: _np.ndarray = None, 
-                      theta: _Union[float, _np.ndarray] = None,
-                      nmax: int = None, 
-                      as_ndarray: bool = False,
-                      check_inputs: bool = True,
-                      effective_medium: bool = True):
+def phase_scatt_ensemble(lam: _Union[float, _np.ndarray],
+                        Nh: _Union[float, _np.ndarray],
+                        Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
+                        D: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
+                        fv: float = 0.0,
+                        *, 
+                        size_dist: _np.ndarray = None, 
+                        theta: _Union[float, _np.ndarray] = None,
+                        nmax: int = None, 
+                        as_ndarray: bool = False,
+                        check_inputs: bool = True,
+                        effective_medium: bool = False,
+                        dependent_scatt: bool = False):
     """
     Calculate the scattering phase function for multiple hard-spheres under unpolarized light. 
     The intensity is normalized such that the integral is equal to qsca
@@ -1023,7 +1078,7 @@ def phase_scatt_dense(lam: _Union[float, _np.ndarray],
             if multilayer sphere, use list of floats (monodisperse) or arrays (polydisperse).
         
         fv: float
-            Filling fraction
+            Filling fraction. Defaul 0.0
         
         size_dist: ndarray
             Diameter density distribution. len(size_dist) == len(D)
@@ -1043,7 +1098,10 @@ def phase_scatt_dense(lam: _Union[float, _np.ndarray],
             
         effective_medium : bool (optional)
             If True, compute the effective refractive index of the host using Bruggeman EMT.
-            Default True
+            Default False
+        
+        dependent_scatt : bool (optional)
+            If True, include structure factor in phase function calculation. Default False
 
     Returns:
         phase_fun: the scattering phase function (as pd.DataFrame or ndarray)
@@ -1053,58 +1111,62 @@ def phase_scatt_dense(lam: _Union[float, _np.ndarray],
             lam, Nh, Np, D, size_dist = _check_mie_inputs(lam, Nh, Np, D,
                                                          size_dist=size_dist)
     
-    N_layers = len(D)                                    # number of layers in the sphere
-    if effective_medium:
-        # Compute effective refractive index of host using Bruggeman EMT
+    # asses if fv is within 0 and 1
+    if not (0 <= fv < 1):
+        raise ValueError("Filling fraction fv must be in the range [0, 1).")
 
+    # checks variable theta
+    theta = _check_theta(theta)
+
+    N_layers = len(D)                                    # number of layers in the sphere
+    if effective_medium and fv > 0:
+        # Compute effective refractive index of host using Bruggeman EMT
         D_layers_mean = []
         for i in range(N_layers - 1):
             if size_dist is None:
                 # Monodisperse
                 D_layers_mean.append(D[i])  # -> float
-            else:
-                # Polydisperse
-                D_layers_mean.append(_np.average(D[i], axis=0,   # -> float
-                                            weights=size_dist))  # size_dist shape (n_bins,)
-                                           
+        else:
+            # Polydisperse
+            D_layers_mean.append(_np.average(D[i], axis=0,   # -> float
+                                        weights=size_dist))  # size_dist shape (n_bins,)
+                                        
         Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
         Nh = emt_brugg(fv, Np_eff, Nh)
-
-    # checks variable theta
-    theta = _check_theta(theta)
 
     # Get form factor
     if size_dist is None:
         # Monodisperse
-        F_theta = phase_scatt(lam, Nh, Np, D,
-                              theta=theta, 
-                              nmax=nmax, 
-                              as_ndarray=True, 
-                              check_inputs=False)
+        phase_fun = _phase_function_single(lam, Nh, Np, D,
+                                         theta=theta, 
+                                         nmax=nmax, 
+                                         as_ndarray=True, 
+                                         check_inputs=False)
     else:
         Ac = _np.pi*(D[-1]/2)**2  # cross-sectional area of each sphere
 
         # Polydisperse: ensemble average over diameter distribution
-        F_theta = _np.zeros((len(theta), len(lam)), dtype=float)
+        phase_fun = _np.zeros((len(theta), len(lam)), dtype=float)
         for i in range(len(size_dist)):
             Di = [d[i] for d in D]  # diameter of each layer for current size bin
             # For each diameter, compute phase function
-            F_theta += size_dist[i] * Ac[i] * phase_scatt(lam, Nh, Np, Di,
-                                                          theta=theta, 
-                                                          nmax=nmax, 
-                                                          as_ndarray=True, 
-                                                          check_inputs=True)
+            phase_fun += size_dist[i] * Ac[i] * _phase_function_single(lam, Nh, Np, Di,
+                                                                     theta=theta, 
+                                                                     nmax=nmax, 
+                                                                     as_ndarray=True, 
+                                                                     check_inputs=True)
         
         # Normalize by average cross-sectional area
-        F_theta /= _np.sum(size_dist * Ac)
+        phase_fun /= _np.sum(size_dist * Ac)
 
-    # Get structure factor
-    S_q = structure_factor_PY(lam, Nh, D[-1], fv, 
-                              theta=theta,
-                              size_dist=size_dist, 
-                              check_inputs=False)
+    if dependent_scatt:
+        # Get structure factor
+        S_q = structure_factor_PY(lam, Nh, D[-1], fv, 
+                                theta=theta,
+                                size_dist=size_dist, 
+                                check_inputs=False)
 
-    phase_fun = F_theta * S_q
+        phase_fun *= S_q
 
     # return phase function as ndarray
     if as_ndarray:
@@ -1117,22 +1179,24 @@ def phase_scatt_dense(lam: _Union[float, _np.ndarray],
 
     return df_phase_fun
 
-def poly_sphere_cross_section(
+def cross_section_ensemble(
     lam: _Union[float, _np.ndarray], 
     Nh: _Union[float, _np.ndarray], 
     Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
     D: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
-    fv: float, 
+    fv: float = 0.0, 
     *,
-    theta: _Union[float, _np.ndarray] = None, 
     size_dist: _np.ndarray = None, 
-    atol_prob: float = 1e-6,        # tolerance for sum(p)=1
-    effective_medium: bool = True,  # whether to compute effective Nh via Bruggeman
-    check_inputs: bool = True       # whether to check mie inputs
+    theta: _Union[float, _np.ndarray] = None,
+    nmax: int = None, 
+    check_inputs: bool = True,
+    effective_medium: bool = False,
+    dependent_scatt: bool = False,
+    phase_function: bool = False
 ):
     """
     Compute size-averaged scattering/absorption cross sections and asymmetry parameter
-    for a polydisperse set of hard spheres under the independent-scattering assumption.
+    for an ensemble of hard spheres under the independent-scattering assumption.
     Not valid for metallic spheres or high volume fractions where near-field coupling
     is important.
 
@@ -1159,21 +1223,28 @@ def poly_sphere_cross_section(
         Particle volume fraction in (0, 1). Used only to compute an effective medium Nh via
         `nk.emt_brugg(fv, Np, Nh)`.
     
-    theta : float or array-like, optional
-        Scattering angle(s) in radians for phase function integration (default: None,
-    
     size_dist : array-like, shape (nD,)
         Number-fraction probabilities for each diameter (Case A). Sum must be 1
         within tolerance; will be renormalized if slightly off.
     
-    atol_prob : float, optional
-        Absolute tolerance for sum(size_dist) to be considered 1 (default: 1e-6).
+    theta : float or array-like, optional
+        Scattering angle(s) in radians for phase function integration (default: None,
     
-    effective_medium : bool, optional
-        Whether to compute an effective host refractive index via Bruggeman EMT (default: True)
-    
+    nmax : int, optional
+        Number of mie scattering coefficients (default: None, automatic).
+        
     check_inputs : bool, optional
         Whether to check mie inputs (default: True)    
+
+    effective_medium : bool, optional
+        Whether to compute an effective host refractive index via Bruggeman EMT (default: True)
+
+    dependent_scatt : bool, optional
+        Whether to include dependent scattering effects via Percus-Yevick structure factor
+        (default: False; not recommended for metallic spheres or high fv)    
+    
+    phase_function : bool, optional
+        If True, also return the phase function DataFrame (default: False)    
 
     Returns
     -------
@@ -1193,14 +1264,17 @@ def poly_sphere_cross_section(
 
     # checks variable theta
     theta = _check_theta(theta)
+
+    # asses if fv is within 0 and 1
+    if not (0 <= fv < 1):
+        raise ValueError("Filling fraction fv must be in the range [0, 1).")
     
     # ---------- Effective medium for host (if your convention is to dress Nh) ----------
     N_layers = len(D)                                    # number of layers in the sphere
-    if effective_medium:
-        # Compute effective refractive index of host using Bruggeman EMT
-
+    if effective_medium and fv > 0:
+        # Compute mean diameter of each layer
         D_layers_mean = []
-        for i in range(N_layers - 1):
+        for i in range(N_layers):
             if size_dist is None:
                 # Monodisperse
                 D_layers_mean.append(D[i])  # -> float
@@ -1208,39 +1282,53 @@ def poly_sphere_cross_section(
                 # Polydisperse
                 D_layers_mean.append(_np.average(D[i], axis=0,   # -> float
                                             weights=size_dist))  # size_dist shape (n_bins,)
-                                           
+
+        # Compute effective refractive index of host using Bruggeman EMT                                   
         Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
         Nh = emt_brugg(fv, Np_eff, Nh)
 
     Ac_list = _np.pi*(D[-1]/2)**2                       # cross-sectional area of each sphere
     # ---------- Absorption: average q_abs * area ----------
     cabs_av = _np.zeros_like(lam, dtype=float)
+    csca_av = _np.zeros_like(lam, dtype=float)
+    gcos_av = _np.zeros_like(lam, dtype=float)
     n_bins = 1 if size_dist is None else len(size_dist)
     for i, p in enumerate(n_bins):
         Di = [d[i] for d in D]           # diameter of each layer for current size bin
         Ac = Ac_list[i]                  # cross-sectional area for current size bin
 
         # mie.scatter_efficiency must return arrays shaped (nλ,)
-        qext, qsca, _ = scatter_efficiency(lam, Nh, Np, Di)
-        qabs = qext - qsca
+        qabs, qsca, gcos = scatter_efficiency(lam, Nh, Np, Di, 
+                                              nmax = nmax,
+                                              check_inputs = False)
+
         # sanitize any tiny negative due to numerics
-        qabs = _np.where(qabs < 0, 0.0, qabs)
         cabs_av += p * qabs * Ac
+        csca_av += p * qsca * Ac
+        gcos_av += p * gcos * qsca * Ac  # weighted by scattering
+    
+    gcos_av /= csca_av  # normalize by total scattering
+
+    if not phase_function:
+        return csca_av, cabs_av, gcos_av, None
 
     # ---------- Scattering and g: via dense phase function integration ----------
-    # phase_scatt_dense should return a DataFrame with index=θ° and columns=λ (your earlier design)
-    phase_fun_df = phase_scatt_dense(lam, Nh, Np, D, fv, 
-                                     size_dist=size_dist, 
-                                     theta=theta, 
-                                     effective_medium=False,
-                                     check_inputs=False)
+    # phase_scatt_ensemble should return a DataFrame with index=θ° and columns=λ (your earlier design)
+    phase_fun_df = phase_scatt_ensemble(lam, Nh, Np, D, fv,
+                                        size_dist=size_dist, 
+                                        theta=theta,
+                                        nmax=nmax,
+                                        as_ndarray=False, 
+                                        effective_medium=False,
+                                        check_inputs=False, 
+                                        dependent_scatt=dependent_scatt)
 
     # Compute Q_sca and g from differential efficiency
-    qsca_av, g_av = scatter_from_phase_function(phase_fun_df)
+    qsca_av, gcos_av = scatter_from_phase_function(phase_fun_df)
 
     # Convert Q_sca (efficiency) to cross section via weighted area ⟨A⟩ = Σ p_i A_i
     A_mean = float(_np.sum(size_dist * Ac_list))
     csca_av = qsca_av * A_mean
 
-    return csca_av, cabs_av, g_av, phase_fun_df
+    return csca_av, cabs_av, gcos_av, phase_fun_df
 

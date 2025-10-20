@@ -770,9 +770,17 @@ def linestyle(sample: pd.DataFrame,
     # Case-insensitive matching
     for col_name in sample.columns:
         color = colors.get(col_name[0], "k")  # default black if not R/T
+        
+        found = False
         for key, ls in linestyles.items():
+            # match line style keywords at end of column name
             if col_name.lower().endswith(key):
                 style[col_name] = ls + color
-            else:
-                style[col_name] = "-" + color  # fallback: solid line
+                found = True
+                break
+
+        # Fallback solid line if no style keyword matched
+        if not found:
+            style[col_name] = "-" + color
+            
     return style

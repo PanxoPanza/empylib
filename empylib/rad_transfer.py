@@ -18,309 +18,323 @@ from . import waveoptics as wv
 from . import nklib as nk
 import iadpython as _iad
 import pandas as pd
-from typing import Union as _Union, Optional as _Optional
-from .utils import as_carray
+from typing import Union as _Union, Optional as _Optional, List as _List
+from .utils import as_carray, _check_mie_inputs
+from .nklib import emt_brugg, emt_multilayer_sphere
 
-def T_beer_lambert(lam,theta, tfilm, Nlayer,fv,D,Np):
+def T_beer_lambert(lam: _Union[float, _np.ndarray],                                         # wavelengths [µm]
+                   Nh: _Union[float, _np.ndarray],                                     # host refractive index
+                   Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],  # particle refractive index
+                   D: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],   # sphere diameters [µm] 
+                   fv: float,                                                          # film volume fraction 
+                   tfilm: float, 
+                   *,
+                   theta: _Union[float, _np.ndarray]= 0.0,                            # angle of incidence in degrees
+                   Nup: _Union[float, _np.ndarray] = 1.0,                              # refractive index above
+                   Ndw: _Union[float, _np.ndarray] = 1.0,                              # refractive index below
+                   size_dist: _np.ndarray = None,                                      # number-fraction weights p_i 
+                   dependent_scatt = False,                                            # use Perkus-Yevik for dependent scattering
+                   effective_medium: bool = True,                                      # whether to compute effective Nh via Bruggeman
+                   use_phase_fun: bool = False,                                        # whether to use phase function instead of g
+                   check_inputs = True                                                 # whether to check mie inputs
+                   ):
     '''
     Transmittance and reflectance from Beer-Lamberts law for a film with 
     spherical particles. Reflectance is cokmputed from classical formulas for 
     incoherent light incident on a slab between two semi-infinite media 
     (no scattering is considered for this parameter)
 
-    Parameters
+ Parameters
     ----------
-    lam : ndaray
-        Wavelength range in microns (um).
-        
-    theta : float
-        Angle of incidence in radians (rad).
-        
-    tfilm : float
-        Film Thickness in milimiters (mm).
-        
-    Nlayer : tuple
-        Refractive index above, in, and below the film. Length of 
-        N must be 3.
-        
-    fv : float
-        Particle's volume fraction.
-        
-    D : float
-        Particle's diameter in microns (um)
-    
-    Np : ndarray or float
-        Refractive index of particles. If ndarray, the size must be equal to
-        len(lam)
-
-    Returns
-    -------    
-    Ttot : ndarray
-        Spectral total transmisivity
-        
-    Rtot : ndarray
-        Spectral total reflectivity
-        
-    Tspec : ndarray
-        Spectral specular transmisivity
-
-    '''
-    if _np.isscalar(lam): lam = _np.array([lam]) # convert lam to ndarray
-
-    assert isinstance(Nlayer, tuple), 'Nlayers must be on tuple format of dim = 3'
-    assert len(Nlayer) == 3, 'length of Nlayer must be == 3'
-    if not _np.isscalar(Np):
-        assert len(Np) == len(lam), 'Np must be either scalar or an ndarray of size len(lam)'
-    
-    # convert all refractive index to arrays of size len(lam)
-    # store result into a list
-    N = []
-    for Ni in Nlayer:
-        if _np.isscalar(Ni): 
-            Ni = _np.ones(len(lam))*Ni
-        else: 
-            assert len(Ni) == len(lam), 'refractive index must be either scalar or ndarray of size len(lam)'
-        N.append(Ni)
-    
-    tfilm = tfilm*1E3 # convert mm to micron units
-    
-    Rp, Tp = wv.incoh_multilayer(lam, theta, N, tfilm, pol = 'TM')
-    Rs, Ts = wv.incoh_multilayer(lam, theta, N, tfilm, pol = 'TE')
-    T    = (Ts + Tp)/2
-    Rtot = (Rp + Rs)/2
-    
-    # Get extinction and scattering efficiency of the sphere
-    qext, qsca = mie.scatter_efficiency(lam, N[1], Np, D)[:2]
-    qabs = qext - qsca # absorption efficiency
-    
-    Ac = _np.pi*D**2/4 # cross section area of sphere
-    Vp = _np.pi*D**3/6 # volume of sphere
-    cabs = Ac*qabs # absorption cross section
-    cext = Ac*qext # extinction cross section
-    
-    theta1 = wv.snell(N[0],N[1], theta)
-    # theta1 = _np.zeros(len(lam),dtype=complex)
-    # for i in range(len(lam)):
-    #     theta1[i] = wv.snell(N[0][i],N[1][i], theta)
-        
-    Ttot = T*_np.exp(-fv/Vp*cabs*tfilm/_np.cos(theta1.real))
-    Tspec = T*_np.exp(-fv/Vp*cext*tfilm/_np.cos(theta1.real))
-
-    return Ttot, Rtot, Tspec
-
-def adm_sphere(
-    lam: _Union[float, _np.ndarray],
-    tfilm: float,
-    fv: float,
-    D: float,
-    Np: _Union[float, _np.ndarray],
-    Nh: _Union[float, _np.ndarray],
-    *,
-    Nup: _Union[float, _np.ndarray] = 1.0,
-    Ndw: _Union[float, _np.ndarray] = 1.0,
-    diffuse: bool = False,
-    effective_medium: bool = True,  # whether to compute effective Nh via Bruggeman
-    check_inputs: bool = True
-    ):
-    """
-    Compute spectral reflectance/transmittance of a film containing non-interacting **spherical particles**
-    using the adding–doubling method (IAD).
-
-    This wraps your single-particle Mie solver to obtain scattering/absorption **coefficients**
-    (μ_s, μ_a) from efficiencies, then calls `adm(...)` to propagate through a slab with
-    multiple scattering.
-
-    Parameters
-    ----------
-    lam : array-like of float, shape (nλ,)
-        Wavelengths in micrometers (µm). Must be > 0.
-    tfilm : float
-        Film thickness in millimeters (mm). Must be ≥ 0.
-    fv : float
-        Particle **volume fraction** (dimensionless). Must be in [0, 1).
-    D : float or list[float]
-        Particle outer diameter in micrometers (µm). If a list is provided, it is
-        interpreted as a **multilayer sphere** with strictly increasing shell outer
-        diameters; the last value is the overall (outermost) diameter.
-    Np : complex or array-like of complex, shape (nλ,)
-        Particle refractive index (can be complex, wavelength-dependent). If scalar,
-        it is broadcast over `lam`.
-    Nh : complex or array-like of complex, shape (nλ,)
-        Host (film matrix) refractive index (can be complex). If scalar, broadcast.
-    Nup : complex or array-like of complex, optional (default 1.0)
-        Refractive index **above** the film (ambient). Scalar or shape (nλ,).
-    Ndw : complex or array-like of complex, optional (default 1.0)
-        Refractive index **below** the film (substrate). Scalar or shape (nλ,).
-    diffuse : bool, optional (default False)
-        If True, forces the asymmetry parameter g → 0 (diffuse approximation)
-        when calling IAD.
-
-    Returns
-    -------
-    Ttot : ndarray, shape (nλ,)
-        Total (hemispherical) transmittance at normal incidence.
-    Rtot : ndarray, shape (nλ,)
-        Total (hemispherical) reflectance at normal incidence.
-    Tspec : ndarray, shape (nλ,)
-        Specular (unscattered) transmittance.
-    Rspec : ndarray, shape (nλ,)
-        Specular (unscattered) reflectance.
-
-    Notes
-    -----
-    - Units: `k_sca, k_abs` are internally converted from µm⁻¹ to mm⁻¹ for IAD.
-    - Efficiencies `Q` are turned into cross sections via the geometric area of the
-      **outer diameter** (for multilayer spheres).
-    - If `qabs = qext - qsca` yields small negative values (numerics), they are clipped to 0.
-    - This function assumes **independent scattering** when forming μ from single-particle Mie.
-    """
-    # ---------- shape & value checks ----------
-    if not _np.isscalar(tfilm):
-        raise ValueError("tfilm must be a scalar thickness in mm.")
-    if tfilm < 0:
-        raise ValueError("tfilm must be ≥ 0 (mm).")
-
-    if not (0 <= float(fv) < 1):
-        raise ValueError("fv (volume fraction) must be in [0, 1).")
-
-    nlam = lam.size
-    if check_inputs:
-        lam, Nh, Np, D = mie._check_mie_inputs(lam, Nh, Np, D)
-
-    Nup = as_carray(Nup, "Nup", nlam, val_type=complex)
-    Ndw = as_carray(Ndw, "Ndw", nlam, val_type=complex)
-
-    # ---------- Effective medium for host (if your convention is to dress Nh) ----------
-    if effective_medium:
-        # Compute effective refractive index of host using Bruggeman EMT
-        Nh = nk.emt_brugg(fv, Np, Nh)
-
-    # ---------- Mie: efficiencies and g ----------
-    qext, qsca, gcos = mie.scatter_efficiency(lam, Nh, Np, D, check_inputs=False)  # shape (nλ,)
-
-    qext = _np.asarray(qext, dtype=float)
-    qsca = _np.asarray(qsca, dtype=float)
-    gcos = _np.asarray(gcos, dtype=float)
-
-    if qext.shape != (nlam,) or qsca.shape != (nlam,) or gcos.shape != (nlam,):
-        raise ValueError("mie.scatter_efficiency must return 1D arrays matching lam.")
-
-    # absorption efficiency (clip small negatives)
-    qabs = qext - qsca
-    qabs[qabs < 0] = 0.0
-
-    # ---------- particle geometry, cross sections ----------
-    # Geometric area and volume based on OUTER diameter
-    D_out = D[-1]
-    Ac = _np.pi * (D_out / 2.0) ** 2        # [µm²]
-    Vp = (_np.pi / 6.0) * (D_out ** 3)      # [µm³]
-
-    # cross sections per particle [µm²]
-    Csca = qsca * Ac
-    Cabs = qabs * Ac
-
-    # coefficients [µm⁻¹] using Case A (number-fraction implicit; here monodisperse)
-    k_sca = (fv / Vp) * Csca
-    k_abs = (fv / Vp) * Cabs
-
-    # diffuse approx (optional)
-    if diffuse:
-        gcos = _np.zeros_like(gcos)
-
-    # ---------- call IAD wrapper ----------
-    Ttot, Rtot, Tspec, Rspec = adm(lam, tfilm, k_sca, k_abs, Nh, 
-                                   gcos=gcos, Nup=Nup, Ndw=Ndw)
-
-    return Ttot, Rtot, Tspec, Rspec
-
-def adm_poly_sphere(lam: _Union[float, _np.ndarray],        # wavelengths [µm]
-                    tfilm: float,                           # film thickness [mm]       
-                    fv: float,                              # film volume fraction 
-                    diameters: _Union[float, _np.ndarray],  # sphere diameters [µm] 
-                    size_dist: _Union[float, _np.ndarray],  # number-fraction weights p_i
-                    Np: _Union[float, _np.ndarray],         # particle refractive index
-                    Nh: _Union[float, _np.ndarray],         # host refractive index
-                    *, 
-                    Nup: _Union[float, _np.ndarray] = 1.0,  # refractive index above
-                    Ndw: _Union[float, _np.ndarray] = 1.0,  # refractive index below
-                    effective_medium: bool = True           # whether to compute effective Nh via Bruggeman
-                    ):
-    """
-    Radiative transfer (IAD) for a film with a **polydisperse** ensemble of hard spheres.
-
-    Pipeline:
-      1) Use `mie.poly_sphere_cross_section` to get size-averaged cross sections per particle
-         (⟨C_sca⟩, ⟨C_abs⟩) and the ensemble phase function vs angle.
-      2) Convert to **coefficients** μ_s, μ_a via number density n_tot = f_v / ⟨V⟩.
-      3) Call `adm(...)` with the **tabulated phase function**.
-
-    Parameters
-    ----------
-    lam : (nλ,) array-like of float
+    lam : array-like, shape (nλ,)
         Wavelengths [µm], strictly positive.
+
+    Nh : float or array-like (nλ,)
+        Host refractive index (can be complex). If array-like, length must equal len(lam).
+
+    Np (float, 1darray or list): Complex refractive index of each 
+                                            shell layer. Np.shape[1] == len(D). 
+        Options are:
+        float:   solid sphere and constant refractive index
+        1darray: solid sphere and spectral refractive index (len = lam)
+        list:    multilayered sphere (with both constant or spectral refractive indexes)
+    
+    D : float, _np.ndarray or list
+        Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
+        if multilayer sphere, use list of floats (monodisperse) or arrays (polydisperse).
+    
+    fv : float
+        Particle volume fraction in (0, 1). Used only to compute an effective medium Nh via
+        `nk.emt_brugg(fv, Np, Nh)`.
+
     tfilm : float
         Film thickness [mm], ≥ 0.
-    fv : float
-        Particle volume fraction (0 ≤ f_v < 1).
-    diameters : (nD,) array-like of float
-        Sphere diameters [µm], strictly positive.
-    size_dist : (nD,) array-like of float
-        **Number-fraction** weights p_i (Case A). Will be renormalized to sum to 1 if slightly off.
-    Np : complex or (nλ,) array-like of complex
-        Particle refractive index.
-    Nh : complex or (nλ,) array-like of complex
-        Host refractive index.
-    Nup, Ndw : complex or (nλ,) array-like of complex, optional
-        Superstrate/substrate refractive indices. Default 1.0 (air).
-    effective_medium : bool, optional (default True)
-        If True, computes an effective host refractive index via the Bruggeman
+            
+    Nup : float or array-like, optional
+        Refractive index above the film. Default is 1.0 (air). If array-like, length must equal len(lam).
 
+    Ndw : float or array-like, optional
+        Refractive index below the film. Default is 1.0 (air). If array-like, length must equal len(lam).
+
+    size_dist : array-like, shape (n_bins,), optional
+        Number-fraction weights for polydisperse particles. Default is None (monodisper
+        particles). If given, must be 1D array with len(size_dist) == len(D[0]) (if D is list)
+        or len(size_dist) == len(D) (if D is array).
+        The weights must be nonnegative and sum to 1.
+        The size distribution is used only when `dependent_scatt=True`.
+    
+    dependent_scatt : bool, optional
+        Whether to include dependent scattering effects via Percus-Yevick structure factor
+        (default: False; not recommended for metallic spheres or high fv)
+    
+    effective_medium : bool, optional
+        Whether to compute an effective medium for the host refractive index via Bruggeman
+        (default: True; recommended for fv >~ 0.1)
+    
+    use_phase_fun : bool, optional
+        Whether to use the full phase function in the radiative transfer (default: False).
+        If False, the asymmetry parameter g is used instead (Henyey-Greenstein approximation).
+        Using the phase function is more accurate but also more computationally intensive.
+    
+    check_inputs : bool, optional
+        Whether to check mie inputs (default: True)    
     Returns
     -------
-    Ttot, Rtot, Tspec, Rspec : (nλ,) ndarrays
-        Total and specular transmittance/reflectance at normal incidence.
+    Ttot : array-like, shape (nλ,)
+        Total transmittance.
+    
+    Rtot : array-like, shape (nλ,)
+        Total reflectance.
+    
+    Tspec : array-like, shape (nλ,)
+        Specular transmittance.
+    
+    Rspec : array-like, shape (nλ,)
+        Specular reflectance.
+    '''
 
-    Notes
-    -----
-    - Units: μ_* returned to `adm` are in µm⁻¹, as expected by your `adm` wrapper.
-    - **Do not** multiply by ⟨A⟩ here: ⟨C⟩ already includes area; coefficients are n_tot·⟨C⟩.
-    """
     # ---------- coerce arrays & basic checks ----------
-    lam = _np.asarray(lam, float).ravel()
-    if lam.ndim != 1 or lam.size == 0 or _np.any(lam <= 0) or not _np.all(_np.isfinite(lam)):
-        raise ValueError("lam must be a 1D array of positive finite wavelengths [µm].")
+    if check_inputs:
+        lam, Nh, Np, D, size_dist = _check_mie_inputs(lam, Nh, Np, D, size_dist=size_dist)
 
-    D = _np.asarray(diameters, float).ravel()
-    p = _np.asarray(size_dist, float).ravel()
+    nlam = lam.size
+    Nup = as_carray(Nup, "Nup", nlam, val_type=complex)
+    Ndw = as_carray(Ndw, "Ndw", nlam, val_type=complex)
 
     if not (0 <= float(fv) < 1):
         raise ValueError("fv (volume fraction) must be in [0,1).")
     if not _np.isscalar(tfilm) or tfilm < 0:
         raise ValueError("tfilm must be a nonnegative scalar in mm.")
 
+    # if dependent scatt, check that particle is metallic through: Im(Np) > Re(Np)
+    if dependent_scatt:
+        if _np.any(_np.array(Np).real < _np.array(Np).imag):
+            print("Warning: Dependent scattering theory not recommended for metallic particles.")
+    
     # ---------- Effective medium for host (if your convention is to dress Nh) ----------
+    N_layers = len(D)                                    # number of layers in the sphere
     if effective_medium:
-        # Compute effective refractive index of host using Bruggeman EMT
-        Nh = nk.emt_brugg(fv, Np, Nh)
+        # Compute mean diameter of each layer
+        D_layers_mean = []
+        for i in range(N_layers):
+            if size_dist is None:
+                # Monodisperse
+                D_layers_mean.append(D[i])  # -> float
+            else:
+                # Polydisperse
+                D_layers_mean.append(_np.average(D[i], axis=0,   # -> float
+                                            weights=size_dist))  # size_dist shape (n_bins,)
 
-    # ---------- call Mie polydisperse helper ----------
-    csca_av, cabs_av, _, phase_scatter = mie.poly_sphere_cross_section(
-            lam, D, p, Np, Nh, fv, effective_medium=False)
+        # Compute effective refractive index of host using Bruggeman EMT                                   
+        Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
+        Nh = emt_brugg(fv, Np_eff, Nh)
+
+    # ---------- Mie cross sections and phase function ----------
+    csca, cabs, _, _ = mie.cross_section_ensemble(lam, D, size_dist, Np, Nh, fv, 
+                                                  size_dist=size_dist,
+                                                  check_inputs=False,
+                                                  effective_medium=False,
+                                                  dependent_scatt=dependent_scatt,
+                                                  phase_function=use_phase_fun)
 
     # ---------- n_tot and coefficients (µm⁻¹) ----------
-    Ac = _np.pi * (D / 2.0) ** 2                # [µm²] (not used in formula below; kept for clarity)
-    V  = (4.0 / 3.0) * _np.pi * (D / 2.0) ** 3  # [µm³]
-    V_mean = float(_np.sum(p * V))              # ⟨V⟩ [µm³]
-    if not _np.isfinite(V_mean) or V_mean <= 0:
-        raise RuntimeError("Average particle volume ⟨V⟩ must be positive/finite.")
+    # Particle volume (or mean volume if polydisperse)
+    V  = (4.0 / 3.0) * _np.pi * (D[-1] / 2.0) ** 3  # [µm³]
+    if size_dist is not None:
+            V = float(_np.sum(size_dist * V))              # ⟨V⟩ [µm³]
 
-    n_tot = fv / V_mean              # [µm⁻³]
-    k_sca = n_tot * csca_av          # [µm⁻¹]
-    k_abs = n_tot * cabs_av          # [µm⁻¹]
+    # Get scattering and absorption coefficients
+    n_tot = fv / V                # [µm⁻³]
+    k_sca = n_tot * csca          # [µm⁻¹]
+    k_abs = n_tot * cabs          # [µm⁻¹]
+    k_ext = k_sca + k_abs         # [µm⁻¹]
+
+    # ---------- Fresnel reflectance/transmittance ----------
+    tfilm = tfilm*1E3 # convert mm to micron units
+    
+    Rp, Tp = wv.incoh_multilayer(lam, theta, (Nup, Nh, Ndw), tfilm, pol = 'TM')
+    Rs, Ts = wv.incoh_multilayer(lam, theta, (Nup, Nh, Ndw), tfilm, pol = 'TE')
+    T    = (Ts + Tp)/2
+    Rtot = (Rp + Rs)/2
+    
+    theta1 = wv.snell(Nup,Nh, theta)
+        
+    Ttot = T*_np.exp(-k_abs*tfilm/_np.cos(theta1.real))
+    Tspec = T*_np.exp(-k_ext*tfilm/_np.cos(theta1.real))
+
+    return Ttot, Rtot, Tspec
+
+def adm_sphere(lam: _Union[float, _np.ndarray],                                     # wavelengths [µm]
+                Nh: _Union[float, _np.ndarray],                                     # host refractive index
+                Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],  # particle refractive index
+                D: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],   # sphere diameters [µm] 
+                fv: float,                                                          # film volume fraction 
+                tfilm: float,                                                       # film thickness [mm]       
+                *,
+                Nup: _Union[float, _np.ndarray] = 1.0,                              # refractive index above
+                Ndw: _Union[float, _np.ndarray] = 1.0,                              # refractive index below
+                size_dist: _np.ndarray = None,                                      # number-fraction weights p_i 
+                dependent_scatt = False,                                            # use Perkus-Yevik for dependent scattering
+                effective_medium: bool = True,                                      # whether to compute effective Nh via Bruggeman
+                use_phase_fun: bool = False,                                        # whether to use phase function instead of g
+                check_inputs = True                                                 # whether to check mie inputs
+                ):
+    '''
+    Parameters
+    ----------
+    lam : array-like, shape (nλ,)
+        Wavelengths [µm], strictly positive.
+
+    Nh : float or array-like (nλ,)
+        Host refractive index (can be complex). If array-like, length must equal len(lam).
+
+    Np (float, 1darray or list): Complex refractive index of each 
+                                            shell layer. Np.shape[1] == len(D). 
+        Options are:
+        float:   solid sphere and constant refractive index
+        1darray: solid sphere and spectral refractive index (len = lam)
+        list:    multilayered sphere (with both constant or spectral refractive indexes)
+    
+    D : float, _np.ndarray or list
+        Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
+        if multilayer sphere, use list of floats (monodisperse) or arrays (polydisperse).
+    
+    fv : float
+        Particle volume fraction in (0, 1). Used only to compute an effective medium Nh via
+        `nk.emt_brugg(fv, Np, Nh)`.
+
+    tfilm : float
+        Film thickness [mm], ≥ 0.
+            
+    Nup : float or array-like, optional
+        Refractive index above the film. Default is 1.0 (air). If array-like, length must equal len(lam).
+
+    Ndw : float or array-like, optional
+        Refractive index below the film. Default is 1.0 (air). If array-like, length must equal len(lam).
+
+    size_dist : array-like, shape (n_bins,), optional
+        Number-fraction weights for polydisperse particles. Default is None (monodisper
+        particles). If given, must be 1D array with len(size_dist) == len(D[0]) (if D is list)
+        or len(size_dist) == len(D) (if D is array).
+        The weights must be nonnegative and sum to 1.
+        The size distribution is used only when `dependent_scatt=True`.
+    
+    dependent_scatt : bool, optional
+        Whether to include dependent scattering effects via Percus-Yevick structure factor
+        (default: False; not recommended for metallic spheres or high fv)
+    
+    effective_medium : bool, optional
+        Whether to compute an effective medium for the host refractive index via Bruggeman
+        (default: True; recommended for fv >~ 0.1)
+    
+    use_phase_fun : bool, optional
+        Whether to use the full phase function in the radiative transfer (default: False).
+        If False, the asymmetry parameter g is used instead (Henyey-Greenstein approximation).
+        Using the phase function is more accurate but also more computationally intensive.
+    
+    check_inputs : bool, optional
+        Whether to check mie inputs (default: True)    
+    Returns
+    -------
+    Ttot : array-like, shape (nλ,)
+        Total transmittance.
+    
+    Rtot : array-like, shape (nλ,)
+        Total reflectance.
+    
+    Tspec : array-like, shape (nλ,)
+        Specular transmittance.
+    
+    Rspec : array-like, shape (nλ,)
+        Specular reflectance.
+    '''
+
+    # ---------- coerce arrays & basic checks ----------
+    if check_inputs:
+        lam, Nh, Np, D, size_dist = _check_mie_inputs(lam, Nh, Np, D, size_dist=size_dist)
+
+    nlam = lam.size
+    Nup = as_carray(Nup, "Nup", nlam, val_type=complex)
+    Ndw = as_carray(Ndw, "Ndw", nlam, val_type=complex)
+
+    if not (0 <= float(fv) < 1):
+        raise ValueError("fv (volume fraction) must be in [0,1).")
+    if not _np.isscalar(tfilm) or tfilm < 0:
+        raise ValueError("tfilm must be a nonnegative scalar in mm.")
+
+    # if dependent scatt, check that particle is metallic through: Im(Np) > Re(Np)
+    if dependent_scatt:
+        if _np.any(_np.array(Np).real < _np.array(Np).imag):
+            print("Warning: Dependent scattering theory not recommended for metallic particles.")
+
+    # ---------- Effective medium for host (if your convention is to dress Nh) ----------
+    N_layers = len(D)                                    # number of layers in the sphere
+    if effective_medium:
+        # Compute mean diameter of each layer
+        D_layers_mean = []
+        for i in range(N_layers):
+            if size_dist is None:
+                # Monodisperse
+                D_layers_mean.append(D[i])  # -> float
+            else:
+                # Polydisperse
+                D_layers_mean.append(_np.average(D[i], axis=0,   # -> float
+                                            weights=size_dist))  # size_dist shape (n_bins,)
+
+        # Compute effective refractive index of host using Bruggeman EMT                                   
+        Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
+        Nh = emt_brugg(fv, Np_eff, Nh)
+
+    # ---------- Mie cross sections and phase function ----------
+    csca, cabs, gcos, phase_scatter = mie.cross_section_ensemble(lam, D, size_dist, Np, Nh, fv, 
+                                                                size_dist=size_dist,
+                                                                check_inputs=False,
+                                                                effective_medium=False,
+                                                                dependent_scatt=dependent_scatt,
+                                                                phase_function=use_phase_fun)
+
+    # ---------- n_tot and coefficients (µm⁻¹) ----------
+    # Particle volume (or mean volume if polydisperse)
+    V  = (4.0 / 3.0) * _np.pi * (D[-1] / 2.0) ** 3  # [µm³]
+    if size_dist is not None:
+            V = float(_np.sum(size_dist * V))              # ⟨V⟩ [µm³]
+
+    # Get scattering and absorption coefficients
+    n_tot = fv / V                # [µm⁻³]
+    k_sca = n_tot * csca          # [µm⁻¹]
+    k_abs = n_tot * cabs          # [µm⁻¹]
 
     # ---------- radiative transfer ----------
-    Ttot, Rtot, Tspec, Rspec = adm(
-            lam, tfilm, k_sca, k_abs, Nh, phase_fun=phase_scatter, Nup=Nup, Ndw=Ndw)
+    if use_phase_fun:
+        Ttot, Rtot, Tspec, Rspec = adm(lam, tfilm, k_sca, k_abs, Nh, 
+                                       phase_fun=phase_scatter, 
+                                       Nup=Nup, 
+                                       Ndw=Ndw)
+    else:
+        Ttot, Rtot, Tspec, Rspec = adm(lam, tfilm, k_sca, k_abs, Nh, 
+                                       gcos=gcos, 
+                                       Nup=Nup, 
+                                       Ndw=Ndw)
 
     return Ttot, Rtot, Tspec, Rspec
 
