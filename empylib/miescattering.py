@@ -970,7 +970,7 @@ def _poly_percus_yevick(fv, qq, D, nD):
         e = psi * average(x**2 * _np.sin(x)**2) / average(x**3)
         f = psi * average(x * _np.sin(x) * Fsc) / average(x**3)
         g = - psi * average(x * _np.cos(x) * Fsc) / average(x**3)
-        # print(c)
+
         
         # Auxiliary variables for S(q)
         denom = d**2 + e**2
@@ -1174,7 +1174,7 @@ def phase_scatt_ensemble(lam: _Union[float, _np.ndarray],
                                 size_dist=size_dist, 
                                 check_inputs=False)
 
-        phase_fun *= S_q
+        phase_fun = phase_fun*S_q
 
     # return phase function as ndarray
     if as_ndarray:

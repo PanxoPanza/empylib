@@ -244,7 +244,6 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
         particles). If given, must be 1D array with len(size_dist) == len(D[0]) (if D is list)
         or len(size_dist) == len(D) (if D is array).
         The weights must be nonnegative and sum to 1.
-        The size distribution is used only when `dependent_scatt=True`.
     
     dependent_scatt : bool, optional
         Whether to include dependent scattering effects via Percus-Yevick structure factor
@@ -289,14 +288,15 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
         raise ValueError("tfilm must be a nonnegative scalar in mm.")
 
     # if dependent scatt, check that particle is metallic through: Im(Np) > Re(Np)
-    if dependent_scatt:
-        if _np.any(_np.array(Np).real < _np.array(Np).imag):
-            print("Warning: Dependent scattering theory not recommended for metallic particles.")
+    # if dependent_scatt:
+    #     if _np.any(_np.array(Np).real < _np.array(Np).imag):
+    #         print("Warning: Dependent scattering theory not recommended for metallic particles.")
 
     # ---------- Effective medium for host (if your convention is to dress Nh) ----------
     N_layers = len(D)                                    # number of layers in the sphere
     
-    if effective_medium:
+    Nh_eff = Nh.copy()
+    if effective_medium and fv > 0.0:
         # Compute mean diameter of each layer
         D_layers_mean = []
         for i in range(N_layers):
@@ -310,14 +310,11 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
 
         # Compute effective refractive index of host using Bruggeman EMT                                   
         Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
-        Nh = emt_brugg(fv, Np_eff, Nh)
-
-    if _np.any(Nh.imag < 0):
-        raise ValueError("Nh (host refractive index) must have nonnegative imaginary part.")
+        Nh_eff = emt_brugg(fv, Np_eff, Nh)
     
     # ---------- Mie cross sections and phase function ----------
     theta_eval = _np.linspace(0, _np.pi, 100)
-    csca, cabs, gcos, phase_scatter = mie.cross_section_ensemble(lam, Nh, Np, D, fv, 
+    csca, cabs, gcos, phase_scatter = mie.cross_section_ensemble(lam, Nh_eff, Np, D, fv, 
                                                                 size_dist=size_dist,
                                                                 theta=theta_eval,
                                                                 check_inputs=False,
@@ -352,13 +349,12 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
 
 @_hide_signature
 def adm(lam, tfilm, k_sca, k_abs, Nh,
-    gcos=None,            # optional: asymmetry parameter per λ
-    *,
-    phase_fun=None,       # optional: phase function vs angle or mu for each λ
-    theta_deg=None,       # required if phase_fun is given as θ-grid (degrees)
-    Nup=1.0,              # refractive index above
-    Ndw=1.0,              # refractive index below
-    quad_pts: int = 16,   # IAD quadrature points when using a tabulated PF
+        gcos=None,            # optional: asymmetry parameter per λ
+        *,
+        phase_fun=None,       # optional: phase function vs θ (DataFrame only; θ index in degrees 0..180)
+        Nup=1.0,              # refractive index above
+        Ndw=1.0,              # refractive index below
+        quad_pts: int = 16,   # IAD quadrature points when using a tabulated PF
 ):
     """
     Adding–doubling (IAD) reflectance/transmittance for a scattering/absorbing film.
@@ -371,15 +367,15 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
     - Nh       : scalar or (nλ,) complex refractive index of the film host
     --------------------------------------------------------------------------
     Choose ONE angular description:
-    - gcos     : (nλ,) asymmetry parameter  (classic Henyey–Greenstein style use)
+    - gcos     : (nλ,) asymmetry parameter  (Henyey–Greenstein style)
       OR
-    - phase_fun: tabulated differential *phase function* (not normalized to 1/4π),
-                 shape (nθ, nλ) ndarray or DataFrame. If rows are θ[deg], pass `theta_deg`.
-                 If index is cosθ (μ), set `theta_deg=None`.
-    - theta_deg: (nθ,) angles in degrees corresponding to phase_fun rows (if needed)
+    - phase_fun: pd.DataFrame of the differential *phase function* (not normalized to 1/4π),
+                 shape (nθ, nλ). **Index must be θ in degrees from 0 to 180.**
+                 Columns must be the wavelengths (same values as `lam`, order-agnostic).
+                 The function will convert θ→μ=cosθ and sort μ ascending in [-1, 1].
     --------------------------------------------------------------------------
     - Nup, Ndw : scalar or (nλ,) complex refractive indices above/below (defaults=1.0)
-    - quad_pts : number of quadrature points for IAD when using a tabulated phase function (default=32)
+    - quad_pts : quadrature points for IAD when using a tabulated phase function
 
     Returns:
     - Ttot, Rtot, Tspec, Rspec : each (nλ,) arrays
@@ -409,9 +405,9 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
     # k_sca, k_abs are in µm^-1 -> mm^-1 multiply by 1e3
     mu_s = k_sca * 1e3
 
-    # add material absorption from host's Im(n): kz_imag = (2π/λ)*Im(n) in mm^-1 (λ in µm -> factor 1e3)
-    kz_imag = 2.0 * _np.pi / lam * Nh_arr.imag * 1e3
-    mu_a = k_abs * 1e3 + 2.0 * kz_imag
+    # host material absorption: α_host = 4π k / λ  (λ in µm)  -> in mm^-1 multiply by 1e3
+    kz_imag = 2.0 * _np.pi / lam * Nh_arr.imag * 1e3  # (2π/λ)*k in mm^-1
+    mu_a = k_abs * 1e3 + 2.0 * kz_imag                # = (k_abs + 2*(2π/λ)k)*1e3 = (k_abs + 4πk/λ)*1e3
     mu_t = mu_s + mu_a
     d = float(tfilm)
 
@@ -427,47 +423,30 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
         if gcos.shape != (nlam,):
             raise ValueError("gcos must have shape (len(lam),).")
 
-    # ---------- prepare phase function (optional branch) ----------
-    pf_cols = None
-    pf_idx  = None
+    # ---------- prepare phase function (TABULATED path) ----------
     if use_pf:
-        if isinstance(phase_fun, pd.DataFrame):
-            pf_cols = _np.asarray(phase_fun.columns)
-            pf_idx  = _np.asarray(phase_fun.index)
-            pf_vals = phase_fun.values  # (nθ, nλ')
-        else:
-            pf_vals = _np.asarray(phase_fun, float)
-            if pf_vals.ndim != 2:
-                raise ValueError("phase_fun must be 2D (nθ, nλ).")
-        # build (nθ, nλ) array aligned to lam
-        if isinstance(phase_fun, pd.DataFrame):
-            # If DataFrame columns are numeric wavelengths, align to lam
-            if pf_cols.shape == (nlam,) and _np.allclose(pf_cols.astype(float), lam, rtol=1e-6, atol=1e-6):
-                PF = pf_vals
-            else:
-                # try to reindex with nearest match
-                try:
-                    PF = phase_fun.reindex(columns=lam, method=None).values
-                except Exception as e:
-                    raise ValueError("phase_fun columns must match lam (wavelengths).") from e
-        else:
-            if pf_vals.shape[1] != nlam:
-                raise ValueError("phase_fun shape must be (nθ, nλ) matching len(lam).")
-            PF = pf_vals
+        if not isinstance(phase_fun, pd.DataFrame):
+            raise TypeError("phase_fun must be a pandas DataFrame with θ-degree index in [0,180].")
 
-        # index handling: if theta_deg given, convert to μ = cosθ and ensure ascending μ
-        if theta_deg is not None:
-            theta_deg = _np.asarray(theta_deg, float)
-            if theta_deg.shape != (PF.shape[0],):
-                raise ValueError("theta_deg length must match phase_fun rows.")
-            mu = _np.cos(_np.radians(theta_deg))
-        else:
-            # try to interpret given index as μ
-            if pf_idx is None:
-                raise ValueError("phase_fun given as ndarray requires theta_deg.")
-            mu = _np.asarray(pf_idx, float)
+        # Validate θ index: must be degrees from 0 to 180
+        theta_idx = _np.asarray(phase_fun.index, float)
+        if theta_idx.ndim != 1:
+            raise ValueError("phase_fun index must be 1D θ (degrees).")
+        if theta_idx.min() < 0.0 or theta_idx.max() > 180.0:
+            raise ValueError("phase_fun index (θ) must lie within [0°, 180°].")
 
-        order = _np.argsort(mu)  # ascending μ in [-1,1]
+        # Align columns to lam (order-agnostic but values must match)
+        try:
+            # If columns are numeric wavelengths, reindex to lam exactly (no interpolation here)
+            PF = phase_fun.reindex(columns=lam, copy=False).values
+        except Exception as e:
+            raise ValueError("phase_fun columns must match lam (wavelengths).") from e
+        if PF.shape != (theta_idx.size, nlam):
+            raise ValueError("phase_fun must have shape (nθ, nλ) matching lam.")
+
+        # Convert θ → μ and sort ascending in [-1, 1]
+        mu = _np.cos(_np.radians(theta_idx))
+        order = _np.argsort(mu)    # ascending
         mu = mu[order]
         PF = PF[order, :]
 
@@ -495,14 +474,13 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
             b = mu_t[j] * d           # optical thickness
             if not use_pf:
                 s = _iad.Sample(a=a, b=b, g=float(gcos[j]), d=d,
-                               n=n_real, n_above=n_up, n_below=n_dw)
+                                n=n_real, n_above=n_up, n_below=n_dw)
             else:
                 # tabulated phase function path
-                # IAD expects one column for the current wavelength
                 pf_col = pf_df.iloc[:, j].to_frame()
                 s = _iad.Sample(a=a, b=b, d=d, n=n_real, n_above=n_up, n_below=n_dw,
-                               quad_pts=int(quad_pts),
-                               pf_type="TABULATED", pf_data=pf_col)
+                                quad_pts=int(quad_pts),
+                                pf_type="TABULATED", pf_data=pf_col)
 
         # normal-incidence total RT
         R_tot, T_tot, _, _ = s.rt()
@@ -515,4 +493,3 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
         Rspec[j] = float(R_spec)
 
     return Ttot, Rtot, Tspec, Rspec
- 
