@@ -19,9 +19,11 @@ from . import nklib as nk
 import iadpython as _iad
 import pandas as pd
 from typing import Union as _Union, Optional as _Optional, List as _List
-from .utils import as_carray, _check_mie_inputs
+from .utils import _as_carray, _check_mie_inputs, _hide_signature
 from .nklib import emt_brugg, emt_multilayer_sphere
+from inspect import Signature
 
+@_hide_signature
 def T_beer_lambert(lam: _Union[float, _np.ndarray],                                         # wavelengths [µm]
                    Nh: _Union[float, _np.ndarray],                                     # host refractive index
                    Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],  # particle refractive index
@@ -34,13 +36,13 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
                    Ndw: _Union[float, _np.ndarray] = 1.0,                              # refractive index below
                    size_dist: _np.ndarray = None,                                      # number-fraction weights p_i 
                    dependent_scatt = False,                                            # use Perkus-Yevik for dependent scattering
-                   effective_medium: bool = True,                                      # whether to compute effective Nh via Bruggeman
+                   effective_medium: bool = False,                                     # whether to compute effective Nh via Bruggeman
                    use_phase_fun: bool = False,                                        # whether to use phase function instead of g
                    check_inputs = True                                                 # whether to check mie inputs
                    ):
     '''
     Transmittance and reflectance from Beer-Lamberts law for a film with 
-    spherical particles. Reflectance is cokmputed from classical formulas for 
+    spherical particles. Reflectance is computed from classical formulas for
     incoherent light incident on a slab between two semi-infinite media 
     (no scattering is considered for this parameter)
 
@@ -69,7 +71,10 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
 
     tfilm : float
         Film thickness [mm], ≥ 0.
-            
+
+    theta : float or array-like, optional
+        Angle of incidence in degrees. Default is 0 (normal incidence). If array-like, length must equal len(lam).
+
     Nup : float or array-like, optional
         Refractive index above the film. Default is 1.0 (air). If array-like, length must equal len(lam).
 
@@ -89,7 +94,7 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
     
     effective_medium : bool, optional
         Whether to compute an effective medium for the host refractive index via Bruggeman
-        (default: True; recommended for fv >~ 0.1)
+        (default: False; recommended for fv >~ 0.1)
     
     use_phase_fun : bool, optional
         Whether to use the full phase function in the radiative transfer (default: False).
@@ -115,11 +120,12 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
 
     # ---------- coerce arrays & basic checks ----------
     if check_inputs:
-        lam, Nh, Np, D, size_dist = _check_mie_inputs(lam, Nh, Np, D, size_dist=size_dist)
+        lam, Nh, Np, D, size_dist = _check_mie_inputs(lam, Nh, Np, D, 
+                                                      size_dist=size_dist)
 
     nlam = lam.size
-    Nup = as_carray(Nup, "Nup", nlam, val_type=complex)
-    Ndw = as_carray(Ndw, "Ndw", nlam, val_type=complex)
+    Nup = _as_carray(Nup, "Nup", nlam, val_type=complex)
+    Ndw = _as_carray(Ndw, "Ndw", nlam, val_type=complex)
 
     if not (0 <= float(fv) < 1):
         raise ValueError("fv (volume fraction) must be in [0,1).")
@@ -150,7 +156,7 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
         Nh = emt_brugg(fv, Np_eff, Nh)
 
     # ---------- Mie cross sections and phase function ----------
-    csca, cabs, _, _ = mie.cross_section_ensemble(lam, D, size_dist, Np, Nh, fv, 
+    csca, cabs, _, _ = mie.cross_section_ensemble(lam, Nh, Np, D, fv, 
                                                   size_dist=size_dist,
                                                   check_inputs=False,
                                                   effective_medium=False,
@@ -184,6 +190,7 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
 
     return Ttot, Rtot, Tspec
 
+@_hide_signature
 def adm_sphere(lam: _Union[float, _np.ndarray],                                     # wavelengths [µm]
                 Nh: _Union[float, _np.ndarray],                                     # host refractive index
                 Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],  # particle refractive index
@@ -195,7 +202,7 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
                 Ndw: _Union[float, _np.ndarray] = 1.0,                              # refractive index below
                 size_dist: _np.ndarray = None,                                      # number-fraction weights p_i 
                 dependent_scatt = False,                                            # use Perkus-Yevik for dependent scattering
-                effective_medium: bool = True,                                      # whether to compute effective Nh via Bruggeman
+                effective_medium: bool = False,                                     # whether to compute effective Nh via Bruggeman
                 use_phase_fun: bool = False,                                        # whether to use phase function instead of g
                 check_inputs = True                                                 # whether to check mie inputs
                 ):
@@ -245,7 +252,7 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
     
     effective_medium : bool, optional
         Whether to compute an effective medium for the host refractive index via Bruggeman
-        (default: True; recommended for fv >~ 0.1)
+        (default: False; recommended for fv >~ 0.1)
     
     use_phase_fun : bool, optional
         Whether to use the full phase function in the radiative transfer (default: False).
@@ -268,14 +275,13 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
     Rspec : array-like, shape (nλ,)
         Specular reflectance.
     '''
-
     # ---------- coerce arrays & basic checks ----------
     if check_inputs:
         lam, Nh, Np, D, size_dist = _check_mie_inputs(lam, Nh, Np, D, size_dist=size_dist)
 
     nlam = lam.size
-    Nup = as_carray(Nup, "Nup", nlam, val_type=complex)
-    Ndw = as_carray(Ndw, "Ndw", nlam, val_type=complex)
+    Nup = _as_carray(Nup, "Nup", nlam, val_type=complex)
+    Ndw = _as_carray(Ndw, "Ndw", nlam, val_type=complex)
 
     if not (0 <= float(fv) < 1):
         raise ValueError("fv (volume fraction) must be in [0,1).")
@@ -289,6 +295,7 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
 
     # ---------- Effective medium for host (if your convention is to dress Nh) ----------
     N_layers = len(D)                                    # number of layers in the sphere
+    
     if effective_medium:
         # Compute mean diameter of each layer
         D_layers_mean = []
@@ -305,9 +312,14 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
         Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
         Nh = emt_brugg(fv, Np_eff, Nh)
 
+    if _np.any(Nh.imag < 0):
+        raise ValueError("Nh (host refractive index) must have nonnegative imaginary part.")
+    
     # ---------- Mie cross sections and phase function ----------
-    csca, cabs, gcos, phase_scatter = mie.cross_section_ensemble(lam, D, size_dist, Np, Nh, fv, 
+    theta_eval = _np.linspace(0, _np.pi, 100)
+    csca, cabs, gcos, phase_scatter = mie.cross_section_ensemble(lam, Nh, Np, D, fv, 
                                                                 size_dist=size_dist,
+                                                                theta=theta_eval,
                                                                 check_inputs=False,
                                                                 effective_medium=False,
                                                                 dependent_scatt=dependent_scatt,
@@ -338,6 +350,7 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
 
     return Ttot, Rtot, Tspec, Rspec
 
+@_hide_signature
 def adm(lam, tfilm, k_sca, k_abs, Nh,
     gcos=None,            # optional: asymmetry parameter per λ
     *,
@@ -345,7 +358,7 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
     theta_deg=None,       # required if phase_fun is given as θ-grid (degrees)
     Nup=1.0,              # refractive index above
     Ndw=1.0,              # refractive index below
-    quad_pts: int = 32,   # IAD quadrature points when using a tabulated PF
+    quad_pts: int = 16,   # IAD quadrature points when using a tabulated PF
 ):
     """
     Adding–doubling (IAD) reflectance/transmittance for a scattering/absorbing film.
@@ -383,9 +396,14 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
         if _np.asarray(arr).shape != (nlam,):
             raise ValueError(f"{name} must have the same length as lam.")
 
-    Nh_arr  = as_carray(Nh,  "Nh" , nlam, val_type=complex)
-    Nup_arr = as_carray(Nup, "Nup", nlam, val_type=complex)
-    Ndw_arr = as_carray(Ndw, "Ndw", nlam, val_type=complex)
+    Nh_arr  = _as_carray(Nh,  "Nh" , nlam, val_type=complex)
+    Nup_arr = _as_carray(Nup, "Nup", nlam, val_type=complex)
+    Ndw_arr = _as_carray(Ndw, "Ndw", nlam, val_type=complex)
+
+    # keep all positive
+    k_sca = _np.maximum(k_sca, 0.0)
+    k_abs = _np.maximum(k_abs, 0.0)
+    Nh_arr.imag = _np.maximum(Nh_arr.imag, 0.0)
 
     # ---------- convert to IAD units (mm^-1); include host absorption via Im(n) ----------
     # k_sca, k_abs are in µm^-1 -> mm^-1 multiply by 1e3

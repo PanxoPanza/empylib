@@ -11,12 +11,10 @@ import platform
 import numpy as _np 
 import pandas as _pd
 from scipy.integrate import quad
-from warnings import warn
 from typing import Callable # used to check callable variables
-from .utils import _ndarray_check
 from pathlib import Path
 # import refidx as ri
-from .utils import convert_units, _check_mie_inputs
+from .utils import _ndarray_check, convert_units, _check_mie_inputs, _warn_extrapolation
 from typing import List as _List, Union as _Union
 import yaml
 import requests
@@ -77,11 +75,8 @@ def get_nkfile(lam, MaterialName, get_from_local_path = False):
     N[N.real<0] = 0                + 1j*N[N.real<0].imag # real part = 0 (keep imag part)
     
     # warning if extrapolated values
-    if lam[ 0] < nk_df.index[0] :
-        warn('Extrapolating from %.3f to %.3f' % (lam[0], nk_df.index[0]))
-        
-    if lam[-1] > nk_df.index[-1] :
-        warn('Extrapolating from %.3f to %.3f' % (nk_df.index[-1], lam[-1]))
+    lo, hi = float(nk_df.index[0]), float(nk_df.index[-1])
+    _warn_extrapolation(lam, lo, hi, label=MaterialName, quantity="refractive index")
     
     # if lam was float (orginaly), convert N to a complex value
     return complex(N[0]) if lam_isfloat else N, nk_df
@@ -107,7 +102,6 @@ def read_nk_yaml_from_ri_info(url):
     nk_df = _pd.read_csv(StringIO(nk_text), sep=r'\s+', names=['wavelength', 'n', 'k'])
 
     return nk_df
-
 
 def get_ri_info(lam,shelf,book,page):
     '''
@@ -136,7 +130,7 @@ def get_ri_info(lam,shelf,book,page):
     url_root = 'https://refractiveindex.info/database/data/' 
     url = url_root  + shelf + '/'  + book  + '/nk/' + page + '.yml'
     nk_df = read_nk_yaml_from_ri_info(url)
-
+    MaterialName = book + '_' + page
     
     # Convert to NumPy arrays
     matLambda = nk_df['wavelength'].to_numpy()
@@ -150,13 +144,11 @@ def get_ri_info(lam,shelf,book,page):
     # N = _fix_nk_anomalous(lam, N.real, N.imag)
     
     # warning if extrapolated values
-    if lam[ 0] < matLambda[ 0] :
-        warn('Extrapolating from %.3f to %.3f' % (lam[0], matLambda[ 0]))
-        
-    if lam[-1] > matLambda[-1] :
-        warn('Extrapolating from %.3f to %.3f' % (matLambda[-1], lam[-1]))
-    
+    lo, hi = float(matLambda[0]), float(matLambda[-1])
+    _warn_extrapolation(lam, lo, hi, label=MaterialName, quantity="refractive index")
+
     return N, nk_df
+
 '''
     --------------------------------------------------------------------
                     dielectric constant models

@@ -1,5 +1,6 @@
 import numpy as _np
 from typing import Union as _Union, Optional as _Optional
+from inspect import Signature as _Signature
 
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
@@ -7,7 +8,7 @@ hbar = 1.0545718E-34            # J*s (plank's constan)
 speed_of_light = 299792458      # m/s (speed of light)
 kBoltzmann = 1.38064852E-23     # J/K (Boltzman constant)
 
-def as_carray(x, name, nlam, val_type = complex):
+def _as_carray(x, name, nlam, val_type = complex):
         arr = _np.asarray(x)
         if arr.ndim == 0:
             return _np.full(nlam, val_type(arr), dtype=val_type)
@@ -385,7 +386,7 @@ def _check_mie_inputs(lam=None, N_host=None, Np_shells=None, D=None, *, size_dis
     # ---- size_dist (normalize & validate) ----
     # If size_dist is None, inputs must be monodisperse.
     if D_out is None:
-        # Without D, default to monodisperse [1.0]
+        # Without D, default to None
         size_dist_out = None
     else:
         is_mono = all(a.size == 1 for a in D_out)
@@ -431,7 +432,7 @@ def _check_mie_inputs(lam=None, N_host=None, Np_shells=None, D=None, *, size_dis
     return lam_out, N_host_out, Np_out, D_out, size_dist_out
 
 def _check_theta(theta: _Optional[_Union[float, _np.ndarray]],
-                 n_theta: int = 361) -> _np.ndarray:
+                 n_theta: int = 181) -> _np.ndarray:
     """
     Validate and format the scattering angle array (theta).
 
@@ -457,3 +458,32 @@ def _check_theta(theta: _Optional[_Union[float, _np.ndarray]],
         theta = _np.asarray(theta, dtype=float).ravel()
 
     return theta
+
+# decorator to hide function signature
+def _hide_signature(func):
+    try:
+        func.__signature__ = _Signature()
+    except Exception:
+        pass
+    return func
+
+def _warn_extrapolation(lam_arr, lo, hi, label="", quantity=""):
+    lam_min = float(_np.min(lam_arr))
+    lam_max = float(_np.max(lam_arr))
+    if lam_min < lo and lam_max > hi:
+        print(
+            f"Extrapolating {label} {quantity} (requested {lam_min:.3f}–{lam_max:.3f} µm; "
+            f"data {lo:.3f}–{hi:.3f} µm)"
+            )
+        
+    else:
+        if lam_min < lo:
+            print(
+                f"Extrapolating {label} {quantity} below tabulated range "
+                f"(requested min {lam_min:.3f} µm; data starts {lo:.3f} µm)",
+               )
+        if lam_max > hi:
+            print(
+                f"Extrapolating {label} {quantity} above tabulated range "
+                f"(requested max {lam_max:.3f} µm; data ends {hi:.3f} µm)",
+            )

@@ -8,7 +8,7 @@ import numpy as _np
 from numpy import pi, exp, conj, imag, real, sqrt
 from scipy.special import jv, yv
 from .nklib import emt_brugg, emt_multilayer_sphere
-from .utils import _check_mie_inputs, _check_theta
+from .utils import _check_mie_inputs, _check_theta, _hide_signature
 import pandas as _pd
 from typing import Union as _Union, Optional as _Optional, List as _List
 
@@ -305,6 +305,7 @@ def _cross_section_at_lam(m,x,nmax = None):
 
     return Qext, Qsca, Asym, Qb, Qf
 
+@_hide_signature
 def scatter_efficiency(lam: _Union[float, _np.ndarray],
                        Nh: _Union[float, _np.ndarray],
                        Np: _Union[float, _np.ndarray],
@@ -375,6 +376,7 @@ def scatter_efficiency(lam: _Union[float, _np.ndarray],
     qabs = qext - qsca
     return qabs, qsca, gcos
 
+@_hide_signature
 def scatter_coefficients(lam: _Union[float, _np.ndarray],
                          Nh: _Union[float, _np.ndarray],
                          Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
@@ -477,6 +479,7 @@ def _pi_tau_1n(theta, nmax):
         
     return pi, tau
 
+@_hide_signature
 def scatter_amplitude(lam: _Union[float, _np.ndarray], 
                       Nh: _Union[float, _np.ndarray], 
                       Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],  
@@ -555,6 +558,7 @@ def scatter_amplitude(lam: _Union[float, _np.ndarray],
 
     return S1, S2
 
+@_hide_signature
 def scatter_stokes(lam: _Union[float, _np.ndarray], 
                    Nh: _Union[float, _np.ndarray], 
                    Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
@@ -690,6 +694,7 @@ def _phase_function_single(lam: _Union[float, _np.ndarray],
 
     return df_phase_fun
 
+@_hide_signature
 def phase_scatt_HG(lam: _Union[float, _np.ndarray], 
                    gcos: _Union[float, _np.ndarray], 
                    qsca: _Union[float, _np.ndarray] = 1,
@@ -746,9 +751,10 @@ def phase_scatt_HG(lam: _Union[float, _np.ndarray],
 
     return df_phase_fun
     
+@_hide_signature
 def scatter_from_phase_function(phase_fun, 
                                 *, 
-                                n_theta: int = 181, 
+                                n_theta: int = 100, 
                                 atol_deg: float = 1.0):
     """
     Compute Qsca and <cos theta> from a DataFrame whose rows are labeled
@@ -976,6 +982,7 @@ def _poly_percus_yevick(fv, qq, D, nD):
         
     return S_q
 
+@_hide_signature
 def structure_factor_PY(lam: _Union[float, _np.ndarray], 
                         Nh: _Union[float, _np.ndarray], 
                         D: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]], 
@@ -1042,6 +1049,7 @@ def structure_factor_PY(lam: _Union[float, _np.ndarray],
 
     return S_q
 
+@_hide_signature
 def phase_scatt_ensemble(lam: _Union[float, _np.ndarray],
                         Nh: _Union[float, _np.ndarray],
                         Np: _Union[float, _np.ndarray, _List[_Union[float, _np.ndarray]]],
@@ -1174,11 +1182,12 @@ def phase_scatt_ensemble(lam: _Union[float, _np.ndarray],
 
     # if not convert phase function to dataframe
     df_phase_fun = _pd.DataFrame(data=phase_fun, 
-                               index=_np.degrees(theta), 
-                               columns=lam)
+                                 index=_np.degrees(theta), 
+                                 columns=lam)
 
     return df_phase_fun
 
+@_hide_signature
 def cross_section_ensemble(
     lam: _Union[float, _np.ndarray], 
     Nh: _Union[float, _np.ndarray], 
@@ -1217,7 +1226,7 @@ def cross_section_ensemble(
     
     D : float, _np.ndarray or list
         Diameter of the spheres. Use float for monodisperse, or array for polydisperse.
-        if multilayer sphere, use list of floats (monodisperse) or arrays (polydisperse).
+        if multilayer sphere, use list of floats (monodisperse) or list of arrays (polydisperse).
     
     fv : float
         Particle volume fraction in (0, 1). Used only to compute an effective medium Nh via
@@ -1287,15 +1296,16 @@ def cross_section_ensemble(
         Np_eff = emt_multilayer_sphere(D_layers_mean, Np, check_inputs=False)
         Nh = emt_brugg(fv, Np_eff, Nh)
 
-    Ac_list = _np.pi*(D[-1]/2)**2                       # cross-sectional area of each sphere
+    Ac = _np.pi*(D[-1]/2)**2                                  # cross-sectional area of each sphere
+    n_bins = 1 if size_dist is None else len(size_dist)       # number of size bins
+    p = _np.asarray([1.0]) if size_dist is None else size_dist  # probability for each size bin
+
     # ---------- Absorption: average q_abs * area ----------
     cabs_av = _np.zeros_like(lam, dtype=float)
     csca_av = _np.zeros_like(lam, dtype=float)
     gcos_av = _np.zeros_like(lam, dtype=float)
-    n_bins = 1 if size_dist is None else len(size_dist)
-    for i, p in enumerate(n_bins):
+    for i in range(n_bins):
         Di = [d[i] for d in D]           # diameter of each layer for current size bin
-        Ac = Ac_list[i]                  # cross-sectional area for current size bin
 
         # mie.scatter_efficiency must return arrays shaped (nλ,)
         qabs, qsca, gcos = scatter_efficiency(lam, Nh, Np, Di, 
@@ -1303,13 +1313,13 @@ def cross_section_ensemble(
                                               check_inputs = False)
 
         # sanitize any tiny negative due to numerics
-        cabs_av += p * qabs * Ac
-        csca_av += p * qsca * Ac
-        gcos_av += p * gcos * qsca * Ac  # weighted by scattering
-    
+        cabs_av += p[i] * qabs * Ac[i]
+        csca_av += p[i] * qsca * Ac[i]
+        gcos_av += p[i] * gcos * qsca * Ac[i]  # weighted by scattering
+
     gcos_av /= csca_av  # normalize by total scattering
 
-    if not phase_function:
+    if not phase_function and not dependent_scatt:
         return csca_av, cabs_av, gcos_av, None
 
     # ---------- Scattering and g: via dense phase function integration ----------
@@ -1327,7 +1337,7 @@ def cross_section_ensemble(
     qsca_av, gcos_av = scatter_from_phase_function(phase_fun_df)
 
     # Convert Q_sca (efficiency) to cross section via weighted area ⟨A⟩ = Σ p_i A_i
-    A_mean = float(_np.sum(size_dist * Ac_list))
+    A_mean = float(_np.sum(p * Ac))
     csca_av = qsca_av * A_mean
 
     return csca_av, cabs_av, gcos_av, phase_fun_df
