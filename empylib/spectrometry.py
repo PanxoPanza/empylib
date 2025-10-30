@@ -599,11 +599,15 @@ def sample_uvvis(sample: str = None,
                  search_dirs: Optional[Iterable[str]] = None,
                  tags: Optional[List[str]] = None,
                  aliases: Optional[Dict[str, List[str]]] = None,
-                 exts: Tuple[str, ...] = (".txt", ".asc")) -> pd.DataFrame:
+                 exts: Tuple[str, ...] = (".txt", ".asc"),
+                 ref_standard: str = "spectralon") -> pd.DataFrame:
     """
     Aggregate UV-Vis measurements for a given sample into a single DataFrame.
+    Applies reflectance correction using a standard reference spectrum
+
+
     Also derives the third component per family (R*, T*) via: total = diffuse + specular.
-    
+
     Files searched (case-insensitive), by default:
       Rtot, Ttot, Rspec, Tspec, Rdif, Tdif
     
@@ -640,6 +644,10 @@ def sample_uvvis(sample: str = None,
     exts : Tuple[str, ...], optional
         Tuple of file extensions to consider (case-insensitive).
         Defaults to (".txt", ".asc").
+
+    ref_standard : str, optional
+        Path to the reference standard spectrum CSV file.
+        Default is "spectralon.csv"
 
     Returns
     -------
@@ -723,6 +731,10 @@ def sample_uvvis(sample: str = None,
     out = _derive_family(out, "Rtot", "Rdif", "Rspec")
     out = _derive_family(out, "Ttot", "Tdif", "Tspec")
 
+    # ---- Load standard reflectance and apply correction ---------------------
+    if ref_standard is not None:
+        out = _correct_reflectance(out, ref_standard)
+    
     # set sample name to the dataframe attribute
     out.attrs["sample_name"] = sample
 
@@ -784,3 +796,35 @@ def linestyle(sample: pd.DataFrame,
             style[col_name] = "-" + color
             
     return style
+
+def _correct_reflectance(out: pd.DataFrame, ref_standard: str) -> None:
+    # Path relative to the empylib package
+    ref_standard += "" if ref_standard.endswith(".csv") else ".csv"
+
+    ref_path = Path(__file__).parent / "IS_reflectance_reference" / ref_standard
+    if not ref_path.is_file():
+        raise FileNotFoundError(f"Reflectance standard not found: {ref_path}")
+
+    ref = pd.read_csv(ref_path)
+    # Expect first column = wavelength (µm or nm), second = reflectance fraction (0–1)
+    ref.columns = [c.strip().lower() for c in ref.columns]
+    wl_col = ref.columns[0]
+    R_col = ref.columns[1]
+    ref = ref.rename(columns={wl_col: "wavelength", R_col: "Rstd"})
+    ref = ref.set_index("wavelength")
+
+    # Match wavelength units: if measurement index ~hundreds, assume nm → convert to µm
+    if out.index.max() > 100:  # e.g., 200–2500 nm
+        out.index = out.index / 1000.0
+
+    # Interpolate standard to same wavelength grid
+    Rstd = ref["Rstd"].reindex(out.index, method=None)
+    if Rstd.isna().any():
+        Rstd = ref["Rstd"].interpolate(method="index").reindex(out.index, method="nearest", fill_value=None)
+
+    # Apply correction only to reflectance columns
+    for col in out.columns:
+        if col.startswith("R"):
+            out[col] = out[col] / Rstd.values
+
+    return out

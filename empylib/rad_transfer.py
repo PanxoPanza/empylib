@@ -381,9 +381,9 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
     - Ttot, Rtot, Tspec, Rspec : each (nλ,) arrays
     """
     # ---------- coerce arrays ----------
-    lam   = _np.asarray(lam,   float)
-    k_sca = _np.asarray(k_sca, float)
-    k_abs = _np.asarray(k_abs, float)
+    lam   = _np.atleast_1d(_np.asarray(lam,   float))
+    k_sca = _np.atleast_1d(_np.asarray(k_sca, float))
+    k_abs = _np.atleast_1d(_np.asarray(k_abs, float))
 
     if lam.ndim != 1:
         raise ValueError("lam must be a 1D array of wavelengths [µm].")
@@ -419,7 +419,7 @@ def adm(lam, tfilm, k_sca, k_abs, Nh,
         raise ValueError("You must provide gcos (per λ) or a tabulated phase_fun.")
 
     if not use_pf:
-        gcos = _np.asarray(gcos, float)
+        gcos = _np.atleast_1d(_np.asarray(gcos, float))
         if gcos.shape != (nlam,):
             raise ValueError("gcos must have shape (len(lam),).")
 
