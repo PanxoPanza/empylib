@@ -145,6 +145,7 @@ def _get_coated_coefficients(m,x, nmax=None):
         Derivative of 2nd order Bessel-Ricatti function (evaluated at ka).
 
     '''
+    x = _np.asarray(x).ravel()
     assert len(x) == len(m)
     
     ka = x[-1] # size parameter of outer layer
@@ -426,9 +427,9 @@ def scatter_coefficients(lam: _Union[float, _np.ndarray],
 
     D = _np.asarray(D)              # ensure D is np array
     
-    m = Np/Nh                       # sphere layers
+    m = Np/Nh.real                  # sphere layers
     R = D/2                         # particle's inner radius
-    kh = 2*pi*Nh/lam                # wavector in the host
+    kh = 2*pi*Nh.real/lam           # wavector in the host
     x = _np.tensordot(kh,R,axes=0)  # size parameter
     m = m.transpose()
 
@@ -1169,7 +1170,7 @@ def phase_scatt_ensemble(lam: _Union[float, _np.ndarray],
 
     if dependent_scatt:
         # Get structure factor
-        S_q = structure_factor_PY(lam, Nh, D[-1], fv, 
+        S_q = structure_factor_PY(lam, Nh, D, fv, 
                                 theta=theta,
                                 size_dist=size_dist, 
                                 check_inputs=False)
@@ -1257,14 +1258,18 @@ def cross_section_ensemble(
 
     Returns
     -------
-    csca_av : _np.ndarray, shape (nλ,)
+    cabs_av : _np.ndarray, shape (nλ,)
         Size-averaged scattering cross section per particle [µm²].
     
-    cabs_av : _np.ndarray, shape (nλ,)
+    csca_av : _np.ndarray, shape (nλ,)
         Size-averaged absorption cross section per particle [µm²].
     
     g_av : _np.ndarray, shape (nλ,)
         Size-averaged asymmetry parameter (⟨cosθ⟩).
+
+    phase_fun_df : pd.DataFrame or None
+        Scattering phase function (if `phase_function=True`), with index=θ° and columns=λ.
+        Otherwise, None.
     """
     # Input checks
     if check_inputs:
@@ -1320,7 +1325,7 @@ def cross_section_ensemble(
     gcos_av /= csca_av  # normalize by total scattering
 
     if not phase_function and not dependent_scatt:
-        return csca_av, cabs_av, gcos_av, None
+        return cabs_av, csca_av, gcos_av, None
 
     # ---------- Scattering and g: via dense phase function integration ----------
     # phase_scatt_ensemble should return a DataFrame with index=θ° and columns=λ (your earlier design)
@@ -1340,5 +1345,5 @@ def cross_section_ensemble(
     A_mean = float(_np.sum(p * Ac))
     csca_av = qsca_av * A_mean
 
-    return csca_av, cabs_av, gcos_av, phase_fun_df
+    return cabs_av, csca_av, gcos_av, phase_fun_df
 

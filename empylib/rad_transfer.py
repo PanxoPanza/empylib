@@ -156,7 +156,7 @@ def T_beer_lambert(lam: _Union[float, _np.ndarray],                             
         Nh = emt_brugg(fv, Np_eff, Nh)
 
     # ---------- Mie cross sections and phase function ----------
-    csca, cabs, _, _ = mie.cross_section_ensemble(lam, Nh, Np, D, fv, 
+    cabs, csca, _, _ = mie.cross_section_ensemble(lam, Nh, Np, D, fv, 
                                                   size_dist=size_dist,
                                                   check_inputs=False,
                                                   effective_medium=False,
@@ -314,7 +314,7 @@ def adm_sphere(lam: _Union[float, _np.ndarray],                                 
     
     # ---------- Mie cross sections and phase function ----------
     theta_eval = _np.linspace(0, _np.pi, 100)
-    csca, cabs, gcos, phase_scatter = mie.cross_section_ensemble(lam, Nh_eff, Np, D, fv, 
+    cabs, csca, gcos, phase_scatter = mie.cross_section_ensemble(lam, Nh_eff, Np, D, fv, 
                                                                 size_dist=size_dist,
                                                                 theta=theta_eval,
                                                                 check_inputs=False,
