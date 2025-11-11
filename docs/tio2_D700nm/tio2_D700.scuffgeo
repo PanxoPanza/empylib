@@ -1,0 +1,6 @@
+OBJECT  tio2_D700_rod
+    MESHFILE tio2_D700_rod.msh
+    MATERIAL FILE_TiO2.dat
+    ENDOBJECT
+    
+    

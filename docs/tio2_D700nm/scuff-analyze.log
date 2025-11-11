@@ -1,0 +1,4 @@
+11/10/25::19:58:50:  Opened mesh file .//
+11/10/25::19:58:50: Found material data file TiO2.dat in directory ..
+11/10/25::19:58:50: Flipped 0 panel normals to comport with region definitions.
+11/10/25::19:58:50: FC::P could not open file tio2_D700_rod.scuffcache (skipping cache preload)

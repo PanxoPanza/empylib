@@ -1,0 +1,5 @@
+geometry tio2_D700.scuffgeo
+OmegaFile OmegaList.dat
+PFTFile tio2_D700.PFT
+pwDirection 0 0 1
+pwPolarization 1 0 0

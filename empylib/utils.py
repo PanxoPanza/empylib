@@ -1,6 +1,8 @@
 import numpy as _np
 from typing import Union as _Union, Optional as _Optional
 from inspect import Signature as _Signature
+from scipy.interpolate import CubicSpline as _CubicSpline
+from typing import Tuple as _Tuple
 
 # standard constants
 e_charge = 1.602176634E-19      # C (elementary charge)
@@ -487,3 +489,138 @@ def _warn_extrapolation(lam_arr, lo, hi, label="", quantity=""):
                 f"Extrapolating {label} {quantity} above tabulated range "
                 f"(requested max {lam_max:.3f} µm; data ends {hi:.3f} µm)",
             )
+
+def detect_spectral_spikes(
+    x: _np.ndarray,
+    y: _np.ndarray,
+    *,
+    k: float = 4.0,                     # robust threshold: flag if |(mL*mR) - med| / MAD > k  AND (mL*mR) < 0
+    min_slope: float | None = None,     # ignore “flat” regions where both slopes are tiny; if None -> 25th pct of |m|
+    dilate: int = 0,                    # expand the mask by this many neighbors on each side
+    max_frac_removed: float = 0.25,     # if more than this fraction would be removed, abort cleaning (return original)
+    return_mask: bool = False,
+) -> _np.ndarray | _Tuple[_np.ndarray, _np.ndarray]:
+    """
+    Clean 1D spectra by removing single-point spikes identified via the
+    product of adjacent slopes.
+
+    A point i (1..n-2) is flagged if the slopes on its left and right
+        segments are (a) of opposite sign and (b) the slope-product is an
+        outlier relative to its robust local scale.
+
+        Parameters
+        ----------
+        x, y : array_like
+        Abscissa (strictly increasing after internal sorting) and ordinate.
+    k : float, default 4.0
+        Robust z-score threshold using median/MAD on slope products. Larger
+        k is stricter (fewer flags).
+    min_slope : float or None, default None
+        Magnitude gate for slopes; both |m_L| and |m_R| must exceed this.
+        If None, it is set to the 25th percentile of |m| (conservative).
+        This prevents flagging tiny zig-zags in flat regions.
+    dilate : int, default 0
+        Binary dilation radius for the mask (grabs immediate neighbors of
+        a one-point spike).
+    max_frac_removed : float, default 0.25
+        Safety limit: if more than this fraction of points would be removed,
+        the function returns the original y unchanged.
+    return_mask : bool, default False
+        If True, return (y_clean, mask). Otherwise just y_clean.
+
+    Returns
+    -------
+    y_clean : ndarray
+        Cleaned series using CubicSpline through non-flagged points.
+    mask : ndarray of bool (optional)
+        True where points were flagged as spikes.
+
+    Notes
+    -----
+    - Uses *global* robust stats on m_L*m_R; you asked for a simple,
+      global criterion rather than windowed/local analysis.
+    - Requires at least 4 unique x-values after sorting/condensing.
+    - If too few good points remain for a spline, the original y is returned.
+    """
+    x = _np.asarray(x, float)
+    y = _np.asarray(y, float)
+    n = y.size
+
+    if n < 4:
+        return (y.copy(), _np.zeros(n, bool)) if return_mask else y.copy()
+
+    # ---- 1) sort by x and condense exact duplicates (average y at same x) ----
+    sorted = False
+    if not _np.all(_np.diff(x) > 0):
+        order = _np.argsort(x)
+        x, y = x[order], y[order]
+        sorted = True
+
+    xu, idx, counts = _np.unique(x, return_index=True, return_counts=True)
+    if xu.size != x.size:
+        # average y over runs of identical x
+        y = _np.add.reduceat(y, idx) / counts
+        x = xu
+        n = x.size
+        if n < 4:
+            return (y.copy(), _np.zeros(n, bool)) if return_mask else y.copy()
+    # ---- 2) adjacent slopes (non-uniform x allowed) ----
+    dx = _np.diff(x)
+    dy = _np.diff(y)
+    # guard against zero-division (shouldn't happen after condensing, but be safe)
+    eps = 1e-15
+    m = dy / (dx + eps)            # length n-1
+    mL, mR = m[:-1], m[1:]         # each length n-2
+
+    # ---- 3) robust outlier score on slope-product ----
+    prod = mL * mR                 # negative for sign flip; large |.| for sharp turns
+    med = _np.median(prod)
+    mad = _np.median(_np.abs(prod - med))
+    scale = 1.4826 * (mad if mad > 0 else _np.median(_np.abs(prod)) + eps)
+    z = _np.abs(prod - med) / (scale + eps)
+
+    # opposite directions required (up/down or down/up)
+    sign_flip = prod < 0.0
+
+    # magnitude gate to avoid tiny wiggles
+    if min_slope is None:
+        min_slope = _np.percentile(_np.abs(m), 25.0)
+    mag_ok = (_np.abs(mL) > min_slope) & (_np.abs(mR) > min_slope)
+    core = sign_flip & mag_ok & (z > k)   # main condition on internal vertices
+
+    # ---- 4) build full-length mask and optional dilation ----
+    mask = _np.zeros(n, dtype=bool)
+    mask[1:-1] = core
+
+    if dilate > 0 and core.any():
+        for r in range(1, dilate + 1):
+            mask[:-r] |= mask[r:]
+            mask[r:]  |= mask[:-r]
+
+    # ---- 5) safety limits & spline repair ----
+    n_bad = int(mask.sum())
+    if n_bad == 0 or n_bad / float(n) > max_frac_removed or (n - n_bad) < 4:
+        # nothing to do or would remove too much / too few points left
+        return (y, mask) if return_mask else y
+
+    xs = x[~mask]
+    ys = y[~mask]
+
+    try:
+        cs = _CubicSpline(xs, ys, bc_type="not-a-knot")
+        y_clean = cs(x)
+    except Exception:
+        # fallback: leave unchanged if spline fails for any reason
+        y_clean = y.copy()
+
+    if sorted:
+        # restore original order
+        y_final = _np.empty_like(y_clean)
+        y_final[order] = y_clean
+        y_clean = y_final
+        if return_mask:
+            mask_final = _np.empty_like(mask)
+            mask_final[order] = mask
+            mask = mask_final
+
+    return (y_clean, mask) if return_mask else y_clean

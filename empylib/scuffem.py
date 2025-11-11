@@ -10,6 +10,8 @@ Created on Thu Oct 10 14:12 2024
 import numpy as np
 import pandas as pd
 from . import nklib as nk
+from .utils import detect_spectral_spikes as _detect_spectral_spikes
+import copy as _copy
 
 def make_spectral_files(lam, Material=None):
     """
@@ -63,6 +65,7 @@ def make_spectral_files(lam, Material=None):
             with open(f"{mat_label}.dat", 'w') as f:
                 for wi, epsilon in zip(w, eps):
                     f.write(f"{wi:.6e} {epsilon.real:.5e}+{epsilon.imag:.5e}i\n")
+
 def read_scatter_PFT(FileName):
     # Extraemos la info en un dataframe
     df = pd.read_csv(FileName,comment = '#', sep='\s+', header = None, index_col = 0)
@@ -110,3 +113,41 @@ def read_avescatter(FileName):
 
     return objectID
 
+def clean_data(objectID,
+                k: float = 4.0,                     # robust threshold: flag if |(mL*mR) - med| / MAD > k  AND (mL*mR) < 0
+                min_slope: float | None = None,     # ignore “flat” regions where both slopes are tiny; if None -> 25th pct of |m|
+                dilate: int = 0,                    # expand the mask by this many neighbors on each side
+                max_frac_removed: float = 0.25,     # if more than this fraction would be removed, abort cleaning (return original)
+                inplace = True):
+    
+    if inplace:
+        object_fix = objectID
+    else:
+        object_fix = _copy.deepcopy(objectID)
+
+    # Iterate over each key and its associated DataFrame
+    for key, df in object_fix.items():
+        if not isinstance(df, pd.DataFrame):
+            # Skip values that are not DataFrames
+            continue
+
+        for col in df.keys():
+            y = df[col].values
+            x = df.index.values
+
+            # Detect spikes in the data
+            y_clean, mask = _detect_spectral_spikes(x, y,
+                                                    k = k,
+                                                    min_slope = min_slope,
+                                                    dilate = dilate,
+                                                    max_frac_removed = max_frac_removed,
+                                                    return_mask = True)
+            if len(mask) == 0:
+                continue
+
+            df[col] = y_clean # update cleaned data in DataFrame
+
+    if not inplace:
+        return object_fix
+
+    return None

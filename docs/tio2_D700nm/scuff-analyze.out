@@ -1,0 +1,41 @@
+***********************************************
+*  GEOMETRY tio2_D700.scuffgeo 
+***********************************************
+      1 surfaces
+   2976 total basis functions
+ Size of BEM matrix: 0.14 GB
+
+***********************************************
+*  REGIONS: 2
+***********************************************
+
+index | Label         | Material properties
+-------------------------------------------
+    0 | EXTERIOR      | VACUUM
+    1 | tio2_D700_rod | FILE_TiO2.dat
+
+***********************************************
+*  SURFACE 0: Label = tio2_D700_rod
+***********************************************
+
+ Interface between regions 0 (EXTERIOR) and 1 (tio2_D700_rod)
+
+ Meshfile: tio2_D700_rod.msh 
+ 992 panels
+ 1488 total edges
+ 2976 total basis functions
+ 1488 interior edges
+ 498 total vertices (after eliminating 0 redundant vertices)
+ 498 interior vertices
+ 0 boundary contours
+
+ interior vertices - interior edges + panels = euler characteristic
+               498 -           1488 +    992 = 2
+
+ Total area: 1.6045141e+01 
+ Avg area: 1.6174537e-02 // sqrt(Avg Area)=1.2717915e-01
+ Standard deviation of panel areas: 2.5986381e-05
+ Total volume: 2.6252083e+00 
+ 
+Geometry visualization data written to GMSH file tio2_D700.pp.
+
