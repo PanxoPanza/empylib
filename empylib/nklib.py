@@ -674,6 +674,21 @@ BaF2 = lambda lam: get_ri_info(lam, 'main', 'BaF2', 'Querry')[0]
 # refractive index of TiO2
 TiO2 = lambda lam: get_ri_info(lam,'main','TiO2','Siefke')[0]
 
+# refractive index of BiVO4 monoclinic (a axis)
+BiVO4_mono_a = lambda lam: get_nkfile(lam, 'BiVO4_a-c_Zhao2011', get_from_local_path = True)[0]
+
+# refractive index of BiVO4 monoclinic (b axis)
+BiVO4_mono_b = lambda lam: get_nkfile(lam, 'BiVO4_b_Zhao2011', get_from_local_path = True)[0]
+
+# refractive index of BiVO4 monoclinic (c axis)
+BiVO4_mono_c = lambda lam: get_nkfile(lam, 'BiVO4_a-c_Zhao2011', get_from_local_path = True)[0]
+
+# average refractive index of BiVO4 monoclinic
+BiVO4 = lambda lam: (BiVO4_mono_a(lam) + BiVO4_mono_b(lam) + BiVO4_mono_c(lam))/3
+
+# refractive index of Cu2O
+Cu2O = lambda lam: get_nkfile(lam, 'Cu2O_Malerba2011', get_from_local_path = True)[0]
+
 # refractive index of ZnO
 ZnO = lambda lam: get_ri_info(lam,'main','ZnO','Querry')[0]
 
